@@ -197,33 +197,33 @@ Target: 1,000 GitHub stars. Timeline: ~8 weeks.
 *Motkra spawns sub-agents and coordinates them.*
 
 ### 10A — Task Tree
-- [ ] **10A-1** Create `core/orchestrator.js` — data structure: `{id, goal, subtasks:[{id, agent, status, result}]}`
-- [ ] **10A-2** Orchestrator prompt: Claude receives user goal + tool list, responds with JSON task breakdown
-- [ ] **10A-3** Add task tree UI to `panel.html` — collapsible tree with status icons (⏳ pending, ▶ running, ✓ done, ✗ failed)
-- [ ] **10A-4** Post task tree updates to panel in real time as subtasks complete
+- [x] **10A-1** Create `core/orchestrator.js` — data structure: `{id, goal, subtasks:[{id, agent, status, result}]}`
+- [x] **10A-2** Orchestrator prompt: Claude receives user goal + tool list, responds with JSON task breakdown
+- [x] **10A-3** Add task tree UI to `panel.html` — collapsible tree with status icons (⏳ pending, ▶ running, ✓ done, ✗ failed)
+- [x] **10A-4** Post task tree updates to panel in real time as subtasks complete
 
 ### 10B — Sub-Agent Execution
-- [ ] **10B-1** Each subtask runs as an independent Claude session with specialized system prompt (researcher / implementer / reviewer)
-- [ ] **10B-2** Sub-agents share the same file tools but have isolated message histories
-- [ ] **10B-3** Subtask output is passed as context to the next subtask (chain-of-thought handoff)
-- [ ] **10B-4** Add Pause / Resume / Redirect controls per subtask branch in panel UI
-- [ ] **10B-5** Add `motkra.maxSubAgents` setting (default: `4`) to cap parallel Claude sessions
+- [x] **10B-1** Each subtask runs as an independent Claude session with isolated message history; shares base system prompt
+- [x] **10B-2** Sub-agents share the same file tools but have isolated message histories
+- [x] **10B-3** Subtask output is passed as context to the next subtask (chain-of-thought handoff)
+- [x] **10B-4** Add Pause / Resume controls per subtask branch in panel UI *(Redirect not implemented)*
+- [x] **10B-5** Add `motkra.maxSubAgents` setting (default: `4`) to cap parallel Claude sessions
 
 ### 10C — Trigger
-- [ ] **10C-1** Detect multi-step intent in user message (keyword: "then", "after that", "and also", "finally") — offer "Run as multi-agent task?" prompt
-- [ ] **10C-2** Add `/plan <goal>` slash command to explicitly invoke orchestrator mode
+- [x] **10C-1** Detect multi-step intent in user message (keyword: "then", "after that", "and also", "finally") — offer "Run as multi-agent task?" prompt
+- [x] **10C-2** Add `/plan <goal>` slash command to explicitly invoke orchestrator mode
 
 ---
 
 ## Phase 11 — System Tray Daemon · Layer 4 (Weeks 6–7)
 *Motkra lives outside VS Code.*
 
-- [ ] **11-1** Scaffold Electron app in new `motkra-daemon/` folder — `main.js`, `tray.js`, `ipc.js`
-- [ ] **11-2** System tray icon with context menu: Open Motkra, Quick Query, Settings, Quit
-- [ ] **11-3** Register global hotkey `Ctrl+Space+Space` (configurable) — opens floating mini-chat window
-- [ ] **11-4** Floating window: frameless, 400×200px, always-on-top, auto-hides on blur
-- [ ] **11-5** IPC bridge: daemon listens on `localhost:7432`, VS Code extension connects as client — shared session state
-- [ ] **11-6** Route floating window queries through the same Claude/Gemma stack
+- [x] **11-1** Scaffold Electron app in new `motkra-daemon/` folder — `main.js`, `tray.js`, `ipc.js`
+- [x] **11-2** System tray icon with context menu: Open Motkra, Quick Query, Settings, Quit
+- [x] **11-3** Register global hotkey `Ctrl+Shift+Space` (configurable via `MOTKRA_HOTKEY` env var)
+- [x] **11-4** Floating window: frameless, 460×520px, always-on-top, auto-hides on blur
+- [x] **11-5** IPC bridge: daemon listens on `localhost:7432`, VS Code extension connects as client
+- [x] **11-6** Route floating window queries through Claude streaming via `ipc.js`
 - [ ] **11-7** Package as installer (NSIS for Windows, `.dmg` for Mac) via `electron-builder`
 
 ---
@@ -231,12 +231,12 @@ Target: 1,000 GitHub stars. Timeline: ~8 weeks.
 ## Phase 12 — Browser Extension · Layer 4 (Week 7)
 *Motkra reads the web for you.*
 
-- [ ] **12-1** Scaffold Chrome/Firefox extension in `motkra-browser/` — `manifest.json` (MV3), `content.js`, `popup.html`
-- [ ] **12-2** Inject "Ask Motkra" floating button on all pages
-- [ ] **12-3** On click: extract page title, URL, main content (Readability.js), selected text
-- [ ] **12-4** Send to Motkra daemon via `localhost:7432`
-- [ ] **12-5** Show response in a side drawer injected into the page (not popup, so it's readable alongside content)
-- [ ] **12-6** Special handling for GitHub pages: extract issue/PR description + comments, send as structured context
+- [x] **12-1** Scaffold Chrome/Firefox extension in `motkra-browser/` — `manifest.json` (MV3), `content.js`, `popup.html`
+- [x] **12-2** Inject "Ask Motkra" floating button on all pages
+- [x] **12-3** On click: extract page title, URL, main content (Readability.js), selected text
+- [x] **12-4** Send to Motkra daemon via `localhost:7432`
+- [x] **12-5** Show response in a side drawer injected into the page (not popup, so it's readable alongside content)
+- [x] **12-6** Special handling for GitHub pages: extract issue/PR description + comments, send as structured context
 
 ---
 
@@ -294,30 +294,97 @@ Target: 1,000 GitHub stars. Timeline: ~8 weeks.
 
 ---
 
+## Phase 17 — Email Agent · Layer 7 (Week 9)
+*Motkra reads your inbox, triages every email, and acts on your behalf — with the right level of autonomy per person.*
+
+### 17A — Gmail OAuth2 Client
+- [ ] **17A-1** Create `motkra-daemon/email/gmail.js` — OAuth2 flow using `googleapis` package; store tokens at `~/.motkra/gmail-tokens.json`
+- [ ] **17A-2** Implement `listNew()` — fetch unread INBOX messages since last poll, return `[{id, from, subject, body, date}]`
+- [ ] **17A-3** Implement `send(to, subject, body, threadId)` — send reply on the same thread
+- [ ] **17A-4** Implement `archive(messageId)` — apply `INBOX` remove + `SPAM` label for auto-archived messages
+- [ ] **17A-5** Persist last-seen message IDs to `~/.motkra/email-state.json` to prevent re-processing on restart
+
+### 17B — Contact Trust Store
+- [ ] **17B-1** Create `motkra-daemon/email/contacts.js` — reads/writes `~/.motkra/email-contacts.json`
+- [ ] **17B-2** Trust levels 1–5 with the following semantics:
+  ```
+  5 — Closest (spouse, parent)     → auto-send if confidence ≥ 6
+  4 — Close family / best friends  → auto-send if confidence ≥ 8
+  3 — Extended family / colleagues → approval email required before send
+  2 — Acquaintances / work         → system tray notification only, no email loop
+  1 — Unknown / first contact      → silent queue, shown in morning briefing
+  ```
+- [ ] **17B-3** Export `getTrust(emailAddress)` — returns 0 (unknown) or 1–5
+- [ ] **17B-4** Add `/email-trust add <address> <name> <level>` slash command in daemon chat window
+
+### 17C — Claude Triage Engine
+- [ ] **17C-1** Create `motkra-daemon/email/triage.js` — sends email to Claude with structured prompt
+- [ ] **17C-2** Prompt instructs Claude to return JSON: `{ action: "spam"|"ignore"|"reply"|"flag", confidence: 1–10, draft: string|null, reason: string }`
+- [ ] **17C-3** `action: "reply"` → Claude writes a complete reply draft in the sender's language and tone
+- [ ] **17C-4** `action: "flag"` → important email needing user judgement (legal, financial, sensitive)
+- [ ] **17C-5** Confidence score 1–10 reflects Claude's certainty about both the classification and the draft quality
+
+### 17D — Decision Engine & Approval Loop
+- [ ] **17D-1** Create `motkra-daemon/email/monitor.js` — polling loop, interval from `motkra.emailPollInterval` (default 120s)
+- [ ] **17D-2** For each new email: call `triage.js` → combine `trust × confidence` into an action decision:
+  ```
+  spam/ignore                          → archive silently
+  reply + trust 5 + confidence ≥ 6    → auto-send, notify user after
+  reply + trust 4 + confidence ≥ 8    → auto-send, notify user after
+  reply + trust 3, or lower confidence → send approval email to user
+  reply + trust 2                      → system tray notification only
+  reply + trust 0–1                    → silent queue
+  flag (any trust)                     → system tray urgent alert + open chat with context
+  ```
+- [ ] **17D-3** Approval email format: Motkra sends itself an email (`From:` = user's own address) with the draft and a `Reply YES / NO / <override text>` instruction
+- [ ] **17D-4** Poll for approval reply: watch for replies to the approval thread; parse first word YES/NO or treat full reply as override text
+- [ ] **17D-5** On YES → send original draft; on NO → discard; on override text → send the user's text instead
+
+### 17E — Notification Windows
+- [ ] **17E-1** Create `motkra-daemon/email/notify-window.html` — frameless Electron window (420×280px), same visual style as `chat.html`
+- [ ] **17E-2** Shows: sender name + trust badge (★☆ 1–5), subject, body preview (3 lines), Claude's draft, confidence bar
+- [ ] **17E-3** Action buttons: **Send**, **Edit & Send**, **Ignore** — Edit opens draft in editable textarea before send
+- [ ] **17E-4** Window auto-dismisses after 60s with no action (email goes to silent queue)
+- [ ] **17E-5** Used for trust-2 notifications and as fallback when daemon has focus
+
+### 17F — Settings & Wiring
+- [ ] **17F-1** Add `motkra.emailEnabled` setting (default: `false`, explicit opt-in)
+- [ ] **17F-2** Add `motkra.emailPollInterval` setting (default: `120`, seconds)
+- [ ] **17F-3** Add `motkra.emailAutoArchiveSpam` setting (default: `true`)
+- [ ] **17F-4** Add `motkra.emailAutoSendThreshold` setting (default: `6`) — minimum confidence for auto-send at trust 5
+- [ ] **17F-5** Wire `monitor.js` startup into `main.js` `app.whenReady()` behind the `emailEnabled` flag
+- [ ] **17F-6** Add "Email Agent" submenu to system tray: Enable/Disable, View Queue, Trust Contacts
+
+---
+
 ## Settings Reference (all phases combined)
 
 ```json
 {
-  "motkra.claudeModel":        "claude-opus-4-7",
-  "motkra.defaultLocalModel":  "gemma4:e2b",
-  "motkra.ollamaHost":         "localhost",
-  "motkra.ollamaPort":         11434,
-  "motkra.privacyScan":        true,
-  "motkra.proactiveErrors":    true,
-  "motkra.proactiveTerminal":  true,
-  "motkra.stuckDetection":     true,
-  "motkra.voiceEnabled":       false,
-  "motkra.ttsEnabled":         false,
-  "motkra.inlineCompletions":  false,
-  "motkra.workspaceIndex":     true,
-  "motkra.allowScreenshot":    false,
-  "motkra.maxSubAgents":       4,
-  "motkra.terminalTimeout":    30,
-  "motkra.allowedCommands":    ["npm","npx","python","pytest","git","node"],
-  "motkra.braveSearchKey":     "",
-  "motkra.githubToken":        "",
-  "motkra.ntfyTopic":          "",
-  "motkra.dailyBriefing":      true
+  "motkra.claudeModel":           "claude-opus-4-7",
+  "motkra.defaultLocalModel":     "gemma4:e2b",
+  "motkra.ollamaHost":            "localhost",
+  "motkra.ollamaPort":            11434,
+  "motkra.privacyScan":           true,
+  "motkra.proactiveErrors":       true,
+  "motkra.proactiveTerminal":     true,
+  "motkra.stuckDetection":        true,
+  "motkra.voiceEnabled":          false,
+  "motkra.ttsEnabled":            false,
+  "motkra.inlineCompletions":     false,
+  "motkra.workspaceIndex":        true,
+  "motkra.allowScreenshot":       false,
+  "motkra.maxSubAgents":          4,
+  "motkra.terminalTimeout":       30,
+  "motkra.allowedCommands":       ["npm","npx","python","pytest","git","node"],
+  "motkra.braveSearchKey":        "",
+  "motkra.githubToken":           "",
+  "motkra.ntfyTopic":             "",
+  "motkra.dailyBriefing":         true,
+  "motkra.emailEnabled":          false,
+  "motkra.emailPollInterval":     120,
+  "motkra.emailAutoArchiveSpam":  true,
+  "motkra.emailAutoSendThreshold": 6
 }
 ```
 
@@ -335,3 +402,4 @@ Target: 1,000 GitHub stars. Timeline: ~8 weeks.
 | 6–7 | System tray + browser extension | Omnipresence tier |
 | 7–8 | GitHub + daily briefing + notifications | Full Motkra tier |
 | 8 | GIF + Marketplace + Product Hunt | 🚀 Launch |
+| 9 | Email agent — triage, trust levels, approval loop | Superhuman tier |
