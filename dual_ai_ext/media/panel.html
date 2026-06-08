@@ -545,6 +545,21 @@
     border-style: dashed;
   }
 
+  /* ── RAG badge ── */
+  #rag-badge {
+    font-size: 10px;
+    padding: 2px 7px;
+    border-radius: 10px;
+    background: var(--vscode-badge-background);
+    color: var(--vscode-badge-foreground);
+    white-space: nowrap;
+    display: none;
+    cursor: default;
+    flex-shrink: 0;
+    opacity: 0.85;
+  }
+  #rag-badge.visible { display: inline-block; }
+
   /* ── Voice controls ── */
   #mic-btn, #tts-btn {
     background: none;
@@ -579,6 +594,7 @@
     </select>
   </div>
   <select id="local-model-select" title="Local Ollama model"></select>
+  <span id="rag-badge"    title="Workspace files indexed for context">📎 0 files</span>
   <span id="memory-badge" title="Facts remembered for this workspace">🧠 0</span>
   <span id="privacy-badge" title="Sensitive content detected — routed to local model">🔒 Private</span>
   <span id="cost-badge" title="Estimated cloud API cost saved by routing to local model">💰 $0.00 saved</span>
@@ -654,6 +670,8 @@ const msgsWrap    = document.getElementById('messages-wrap');
 const costBadge        = document.getElementById('cost-badge');
 const privBadge        = document.getElementById('privacy-badge');
 const memoryBadge      = document.getElementById('memory-badge');
+const ragBadge         = document.getElementById('rag-badge');
+let   ragHideTimer     = null;
 const localModelSelect = document.getElementById('local-model-select');
 const proactiveBanner  = document.getElementById('proactive-banner');
 const proactiveMsg     = document.getElementById('proactive-msg');
@@ -1169,6 +1187,20 @@ window.addEventListener('message', ev => {
       }
       break;
     }
+
+    case 'rag-indexed':
+      // Workspace fully indexed — show total file count quietly
+      ragBadge.textContent = `📎 ${msg.count} files`;
+      ragBadge.title = `${msg.count} workspace files indexed for context`;
+      ragBadge.classList.add('visible');
+      break;
+
+    case 'rag-context':
+      // RAG context was injected into this request — briefly highlight badge
+      ragBadge.textContent = `📎 ${msg.count} file${msg.count !== 1 ? 's' : ''}`;
+      ragBadge.classList.add('visible');
+      clearTimeout(ragHideTimer);
+      break;
 
     case 'voice-config':
       micBtn.classList.toggle('visible', !!msg.sttEnabled);

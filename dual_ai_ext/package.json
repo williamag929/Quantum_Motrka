@@ -108,6 +108,16 @@
           "default": "gemma4:e2b",
           "description": "Default local Ollama model for completions and fast responses."
         },
+        "motkra.workspaceIndex": {
+          "type": "boolean",
+          "default": true,
+          "description": "Build a TF-IDF index of workspace files and inject relevant context into Claude requests."
+        },
+        "motkra.workspaceIndexMaxKB": {
+          "type": "number",
+          "default": 500,
+          "description": "Maximum file size in KB to include in the workspace index."
+        },
         "motkra.voiceEnabled": {
           "type": "boolean",
           "default": false,

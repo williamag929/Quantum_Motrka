@@ -18,6 +18,7 @@ const { scan: scanPrivacy } = require('./core/privacy-scanner');
 const memory                = require('./core/memory');
 const ambientWatcher        = require('./ambient/watcher');
 const voice                 = require('./core/voice');
+const indexer               = require('./core/indexer');
 
 const DEFAULT_SYSTEM_PROMPT =
   'You are a coding agent inside VS Code. ' +
@@ -335,6 +336,19 @@ class MoktaProvider {
       terminalTimeout: cfg.get('terminalTimeout'),
     };
 
+    // ── RAG context (Phase 6) — inject relevant files for Claude ──────────
+    if (model === 'cloud' && cfg.get('workspaceIndex', true) && indexer.isReady()) {
+      const hits = indexer.query(userText, 3);
+      if (hits.length > 0) {
+        const ragBlock = 'Relevant workspace files:\n\n' + hits.map(h =>
+          `### ${path.relative(this._workspace, h.filePath)}\n${h.excerpt}`
+        ).join('\n\n');
+        const last = sess.history[sess.history.length - 1];
+        if (last?.role === 'user') last.content += `\n\n---\n\n${ragBlock}`;
+        this._post({ type: 'rag-context', count: hits.length, sessionId: sid });
+      }
+    }
+
     this._post(s({ type: 'model', model }));
     this._post(s({ type: 'start' }));
 
@@ -525,6 +539,33 @@ function activate(context) {
   const reload = () => provider.reloadAgents();
   watcher.onDidCreate(reload); watcher.onDidChange(reload); watcher.onDidDelete(reload);
   context.subscriptions.push(watcher);
+
+  // ── Workspace RAG index (Phase 6) ───────────────────────────────────
+  const buildIndex = () => {
+    const root = vscode.workspace.workspaceFolders?.[0]?.uri?.fsPath;
+    const cfg  = vscode.workspace.getConfiguration('motkra');
+    if (!root || !cfg.get('workspaceIndex', true)) return;
+    const count = indexer.index(root);
+    provider._post({ type: 'rag-indexed', count });
+  };
+
+  // Build initial index 1.5 s after activation to not block startup
+  setTimeout(buildIndex, 1500);
+
+  // Incremental updates on save / create / delete
+  context.subscriptions.push(
+    vscode.workspace.onDidSaveTextDocument(doc => {
+      const cfg = vscode.workspace.getConfiguration('motkra');
+      if (cfg.get('workspaceIndex', true)) indexer.indexFile(doc.uri.fsPath);
+    }),
+    vscode.workspace.onDidCreateFiles(e => {
+      const cfg = vscode.workspace.getConfiguration('motkra');
+      if (cfg.get('workspaceIndex', true)) e.files.forEach(f => indexer.indexFile(f.fsPath));
+    }),
+    vscode.workspace.onDidDeleteFiles(e => {
+      e.files.forEach(f => indexer.removeFile(f.fsPath));
+    })
+  );
 
   // ── Ambient watchers (Phase 2) ───────────────────────────────────────
   ambientWatcher.activate(provider).forEach(d => context.subscriptions.push(d));

@@ -138,13 +138,13 @@ Target: 1,000 GitHub stars. Timeline: ~8 weeks.
 ## Phase 6 — Workspace RAG · Tier 2 (Week 4)
 *Claude sees the whole codebase, not just the open file.*
 
-- [ ] **6-1** Create `core/indexer.js` — walk workspace files on activation, skip `node_modules/`, `.git/`, `*.vsix`, binary files
-- [ ] **6-2** Build TF-IDF index: tokenize each file, store term frequencies in SQLite (`index` table)
-- [ ] **6-3** Implement `query(userMessage, topK=3)` — score all files against query terms, return top-K file paths + relevant excerpts
-- [ ] **6-4** Inject retrieved context into Claude requests: prepend as "Relevant files:" section in the first user message
-- [ ] **6-5** Show `📎 N files` badge in panel header when context is attached
-- [ ] **6-6** Re-index on file save (incremental — only update changed file's entries)
-- [ ] **6-7** Add `motkra.workspaceIndex` toggle setting and max file size limit (default: 500KB)
+- [x] **6-1** Create `core/indexer.js` — walks workspace files (capped at 2000), skips `node_modules`, `.git`, `__pycache__`, binaries
+- [x] **6-2** Build TF-IDF index in memory: tokenize each file, Map of term→TF, global DF table — no SQLite dependency
+- [x] **6-3** Implement `query(text, topK=3)` — TF-IDF scoring, returns top-K file paths + best matching excerpt
+- [x] **6-4** Inject retrieved context into Claude requests as "Relevant workspace files:" appended to user message
+- [x] **6-5** Show `📎 N files` badge in panel header — lights up on indexing complete and on each RAG injection
+- [x] **6-6** Re-index on save/create/delete via `onDidSaveTextDocument`, `onDidCreateFiles`, `onDidDeleteFiles`
+- [x] **6-7** Add `motkra.workspaceIndex` toggle and `motkra.workspaceIndexMaxKB` settings
 
 ---
 
