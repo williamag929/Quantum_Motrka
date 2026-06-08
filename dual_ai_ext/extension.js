@@ -17,6 +17,7 @@ const { loadAgents }        = require('./agents');
 const { scan: scanPrivacy } = require('./core/privacy-scanner');
 const memory                = require('./core/memory');
 const ambientWatcher        = require('./ambient/watcher');
+const voice                 = require('./core/voice');
 
 const DEFAULT_SYSTEM_PROMPT =
   'You are a coding agent inside VS Code. ' +
@@ -80,9 +81,11 @@ class MoktaProvider {
     this._sessCounter      = 0;
     this._agents           = [{ id: 'default', name: 'Default', description: 'Built-in coding agent', systemPrompt: null }];
     this._activeAgent      = 'default';
-    this._pendingDiffs     = new Map();
-    this._currentLocalModel = null; // null = use motkra.defaultLocalModel setting
-    this._channel          = null;
+    this._pendingDiffs      = new Map();
+    this._currentLocalModel = null;
+    this._sttDispose        = null;  // active STT session dispose fn
+    this._ttsMuted          = false;
+    this._channel           = null;
   }
 
   // ── Computed properties ──────────────────────────────────────────────
@@ -179,6 +182,7 @@ class MoktaProvider {
           this._pushSavedCost();
           this._pushMemoryCount();
           this.reloadOllamaModels();
+          this._pushVoiceConfig();
           break;
 
         case 'chat':
@@ -214,6 +218,27 @@ class MoktaProvider {
 
         case 'local-model':
           this._currentLocalModel = msg.model || null;
+          break;
+
+        // ── Voice commands (Phase 4) ───────────────────────────────────
+        case 'voice-start':
+          if (this._sttDispose) { this._sttDispose(); this._sttDispose = null; }
+          voice.startSTT(
+            partial => this._post({ type: 'voice-partial', text: partial }),
+            final   => {
+              this._post({ type: 'voice-final', text: final });
+              if (this._sttDispose) { this._sttDispose(); this._sttDispose = null; }
+            }
+          ).then(dispose => { this._sttDispose = dispose; });
+          break;
+
+        case 'voice-stop':
+          if (this._sttDispose) { this._sttDispose(); this._sttDispose = null; }
+          this._post({ type: 'voice-stopped' });
+          break;
+
+        case 'tts-mute':
+          this._ttsMuted = msg.muted ?? !this._ttsMuted;
           break;
 
         // ── Diff approval ──────────────────────────────────────────────
@@ -349,6 +374,12 @@ class MoktaProvider {
         const total     = (this._ctx.globalState.get('motkra.totalSaved') ?? 0) + savedNow;
         this._ctx.globalState.update('motkra.totalSaved', total);
         this._post({ type: 'cost-update', saved: total });
+
+        // ── TTS (Phase 4B) — read short Gemma responses aloud ─────────
+        const ttsCfg = vscode.workspace.getConfiguration('motkra');
+        if (ttsCfg.get('ttsEnabled', false) && !this._ttsMuted) {
+          voice.speak(full);
+        }
       }
     } catch (err) {
       this._post(s({ type: 'error', text: err.message }));
@@ -397,6 +428,15 @@ class MoktaProvider {
   }
 
   // ── Helpers ──────────────────────────────────────────────────────────
+
+  _pushVoiceConfig() {
+    const cfg = vscode.workspace.getConfiguration('motkra');
+    this._post({
+      type:       'voice-config',
+      sttEnabled: cfg.get('voiceEnabled', false),
+      ttsEnabled: cfg.get('ttsEnabled',   false),
+    });
+  }
 
   _pushSavedCost() {
     const total = this._ctx.globalState.get('motkra.totalSaved') ?? 0;

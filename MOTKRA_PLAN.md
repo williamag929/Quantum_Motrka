@@ -106,19 +106,19 @@ Target: 1,000 GitHub stars. Timeline: ~8 weeks.
 *Talk to it. It talks back.*
 
 ### 4A — Speech to Text
-- [ ] **4A-1** Add `"ms-vscode.vscode-speech"` to `extensionDependencies` in `package.json`
-- [ ] **4A-2** Add microphone button to `panel.html` — toggles recording state with visual indicator
-- [ ] **4A-3** Create `core/voice.js` — wrap VS Code Speech API `createSpeechToTextSession()`
-- [ ] **4A-4** Stream partial transcription as draft text in the input box while recording
-- [ ] **4A-5** On `SpeechToTextStatus.Recognized`, submit transcript as chat message
-- [ ] **4A-6** Add `motkra.voiceEnabled` setting (default: `false`, opt-in)
+- [ ] **4A-1** Add `"ms-vscode.vscode-speech"` to `extensionDependencies` *(skipped — checked at runtime with install prompt instead, avoids forcing dependency on all users)*
+- [x] **4A-2** Add microphone button to `panel.html` — toggles recording state with red blinking indicator; hidden unless `motkra.voiceEnabled` is true
+- [x] **4A-3** Create `core/voice.js` — wraps VS Code Speech API `createSpeechToTextSession()`; shows install prompt if extension missing
+- [x] **4A-4** Stream partial transcription as draft text in the input box (italic/dimmed) while recording
+- [x] **4A-5** On `SpeechToTextStatus.Recognized`, auto-submit transcript as chat message
+- [x] **4A-6** Add `motkra.voiceEnabled` setting (default: `false`, opt-in)
 
 ### 4B — Text to Speech
-- [ ] **4B-1** Wrap VS Code Speech API TTS in `core/voice.js`
-- [ ] **4B-2** After each Gemma response (short messages only, <200 words), read response aloud
-- [ ] **4B-3** Skip TTS for code blocks and file edits — read prose only
-- [ ] **4B-4** Add speaker icon in panel to mute/unmute TTS per session
-- [ ] **4B-5** Add `motkra.ttsEnabled` setting (default: `false`)
+- [x] **4B-1** Wrap VS Code Speech API TTS in `core/voice.js` — `speak(text)` strips code blocks and skips >200 word responses
+- [x] **4B-2** After each Gemma response, call `voice.speak()` if TTS enabled and not muted
+- [x] **4B-3** Skip TTS for code blocks and markdown — reads prose only
+- [x] **4B-4** Add 🔊 speaker button in panel toolbar — toggles per-session mute, posts `tts-mute` to extension
+- [x] **4B-5** Add `motkra.ttsEnabled` setting (default: `false`)
 
 ---
 

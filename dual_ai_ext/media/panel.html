@@ -544,6 +544,29 @@
     font-style: italic;
     border-style: dashed;
   }
+
+  /* ── Voice controls ── */
+  #mic-btn, #tts-btn {
+    background: none;
+    border: none;
+    color: var(--vscode-foreground);
+    cursor: pointer;
+    font-size: 15px;
+    padding: 4px 6px;
+    border-radius: 3px;
+    opacity: 0.55;
+    flex-shrink: 0;
+    line-height: 1;
+  }
+  #mic-btn:hover, #tts-btn:hover { opacity: 1; }
+  #mic-btn { display: none; }
+  #mic-btn.visible { display: inline-block; }
+  #mic-btn.recording {
+    opacity: 1;
+    color: #ff6060;
+    animation: blink .6s step-end infinite;
+  }
+  #tts-btn.muted { opacity: 0.25; }
 </style>
 </head>
 <body>
@@ -609,7 +632,11 @@
       <button id="sw-cloud" title="Always use Claude">☁ Claude</button>
       <button id="sw-local" title="Always use local Gemma">⬡ Local</button>
     </div>
-    <button id="send-btn">Send</button>
+    <div style="display:flex;gap:4px;align-items:center">
+      <button id="tts-btn" title="Mute / unmute text-to-speech">🔊</button>
+      <button id="mic-btn" title="Voice input (hold to record)">🎤</button>
+      <button id="send-btn">Send</button>
+    </div>
   </div>
 </div>
 
@@ -633,6 +660,11 @@ const proactiveMsg     = document.getElementById('proactive-msg');
 const proactiveYes     = document.getElementById('proactive-yes');
 const proactiveDismiss = document.getElementById('proactive-dismiss');
 let   proactiveAutoFill = '';
+
+const micBtn  = document.getElementById('mic-btn');
+const ttsBtn  = document.getElementById('tts-btn');
+let   isRecording = false;
+let   ttsMuted    = false;
 
 // ── Diff overlay ──────────────────────────────────────────────────────────
 const diffOverlay = document.getElementById('diff-overlay');
@@ -660,6 +692,30 @@ proactiveDismiss.addEventListener('click', () => {
 // ── Local model select ────────────────────────────────────────────────────
 localModelSelect.addEventListener('change', () => {
   vscode.postMessage({ type: 'local-model', model: localModelSelect.value });
+});
+
+// ── Voice controls ────────────────────────────────────────────────────────
+micBtn.addEventListener('click', () => {
+  if (isRecording) {
+    isRecording = false;
+    micBtn.classList.remove('recording');
+    micBtn.title = 'Voice input';
+    vscode.postMessage({ type: 'voice-stop' });
+  } else {
+    isRecording = true;
+    micBtn.classList.add('recording');
+    micBtn.title = 'Recording… click to stop';
+    inputEl.value = '';
+    inputEl.placeholder = 'Listening…';
+    vscode.postMessage({ type: 'voice-start' });
+  }
+});
+
+ttsBtn.addEventListener('click', () => {
+  ttsMuted = !ttsMuted;
+  ttsBtn.classList.toggle('muted', ttsMuted);
+  ttsBtn.title = ttsMuted ? 'TTS muted — click to unmute' : 'Mute / unmute text-to-speech';
+  vscode.postMessage({ type: 'tts-mute', muted: ttsMuted });
 });
 
 /** LCS-based line diff. Returns [{type:'context'|'removed'|'added', text}] */
@@ -1113,6 +1169,38 @@ window.addEventListener('message', ev => {
       }
       break;
     }
+
+    case 'voice-config':
+      micBtn.classList.toggle('visible', !!msg.sttEnabled);
+      ttsBtn.style.display = msg.ttsEnabled ? '' : 'none';
+      break;
+
+    case 'voice-partial':
+      inputEl.value = msg.text;
+      inputEl.style.fontStyle = 'italic';
+      inputEl.style.opacity   = '0.6';
+      break;
+
+    case 'voice-final':
+      inputEl.value = msg.text;
+      inputEl.style.fontStyle = '';
+      inputEl.style.opacity   = '';
+      inputEl.placeholder     = 'Ask anything… Claude edits files, Gemma answers fast.';
+      isRecording = false;
+      micBtn.classList.remove('recording');
+      micBtn.title = 'Voice input';
+      // Auto-send the recognized phrase
+      send();
+      break;
+
+    case 'voice-stopped':
+      isRecording = false;
+      micBtn.classList.remove('recording');
+      micBtn.title = 'Voice input';
+      inputEl.style.fontStyle = '';
+      inputEl.style.opacity   = '';
+      inputEl.placeholder     = 'Ask anything… Claude edits files, Gemma answers fast.';
+      break;
   }
 });
 

@@ -107,6 +107,16 @@
           "type": "string",
           "default": "gemma4:e2b",
           "description": "Default local Ollama model for completions and fast responses."
+        },
+        "motkra.voiceEnabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Show microphone button for voice input via the VS Code Speech extension (ms-vscode.vscode-speech)."
+        },
+        "motkra.ttsEnabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Read short Gemma responses aloud using VS Code Speech text-to-speech. Skips code blocks."
         }
       }
     }
