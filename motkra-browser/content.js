@@ -1,10 +1,10 @@
 'use strict';
 
-// Prevent double-injection on dynamic page loads
-if (window.__motkraLoaded) throw new Error('skip');
-window.__motkraLoaded = true;
-
 (function () {
+
+// Prevent double-injection on dynamic page loads
+if (window.__motkraLoaded) return;
+window.__motkraLoaded = true;
 
 // ── Storage ───────────────────────────────────────────────────────────────
 
