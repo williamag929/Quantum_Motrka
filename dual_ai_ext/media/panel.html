@@ -582,6 +582,125 @@
     animation: blink .6s step-end infinite;
   }
   #tts-btn.muted { opacity: 0.25; }
+
+  /* ── Plan overlay (Phase 10) ── */
+  #plan-overlay {
+    display: none;
+    position: absolute;
+    inset: 0;
+    background: var(--vscode-editor-background);
+    z-index: 40;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  #plan-overlay.visible { display: flex; }
+
+  #plan-header {
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--vscode-sideBarSectionHeader-border, #333);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+    background: var(--vscode-sideBarSectionHeader-background);
+  }
+  #plan-goal {
+    flex: 1;
+    font-size: 11px;
+    opacity: 0.75;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  #plan-status {
+    font-size: 10px;
+    padding: 2px 7px;
+    border-radius: 10px;
+    background: var(--vscode-badge-background);
+    color: var(--vscode-badge-foreground);
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  #plan-close {
+    background: none;
+    border: none;
+    color: var(--vscode-foreground);
+    opacity: 0.5;
+    cursor: pointer;
+    font-size: 14px;
+    padding: 2px 4px;
+    flex-shrink: 0;
+  }
+  #plan-close:hover { opacity: 1; }
+
+  #plan-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .plan-task {
+    border: 1px solid var(--vscode-widget-border, #333);
+    border-radius: 5px;
+    overflow: hidden;
+  }
+  .plan-task-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    background: var(--vscode-sideBarSectionHeader-background);
+    cursor: pointer;
+    user-select: none;
+  }
+  .plan-task-icon { font-size: 13px; flex-shrink: 0; }
+  .plan-task-title {
+    flex: 1;
+    font-size: 12px;
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .plan-task-actions { display: flex; gap: 4px; flex-shrink: 0; }
+  .plan-task-btn {
+    background: none;
+    border: 1px solid var(--vscode-input-border, #555);
+    color: var(--vscode-foreground);
+    border-radius: 3px;
+    padding: 2px 7px;
+    cursor: pointer;
+    font-size: 10px;
+    opacity: 0.65;
+  }
+  .plan-task-btn:hover { opacity: 1; background: var(--vscode-inputOption-activeBackground); }
+
+  .plan-task-output {
+    padding: 8px 10px;
+    font-size: 11px;
+    line-height: 1.5;
+    border-top: 1px solid var(--vscode-widget-border, #333);
+    display: none;
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 200px;
+    overflow-y: auto;
+    background: var(--vscode-editor-background);
+  }
+  .plan-task-output.open { display: block; }
+
+  .plan-task.running .plan-task-header { border-left: 3px solid var(--vscode-focusBorder, #007acc); }
+  .plan-task.done    .plan-task-header { border-left: 3px solid #4caf50; }
+  .plan-task.error   .plan-task-header { border-left: 3px solid #f44336; }
+  .plan-task.running .plan-task-title::after {
+    content: ' …';
+    font-weight: normal;
+    opacity: 0.5;
+    animation: blink .7s step-end infinite;
+  }
 </style>
 </head>
 <body>
@@ -620,6 +739,16 @@
 </div>
 
 <div id="messages-wrap">
+  <!-- Plan task tree overlay (Phase 10) -->
+  <div id="plan-overlay">
+    <div id="plan-header">
+      <span id="plan-goal"></span>
+      <span id="plan-status">Planning…</span>
+      <button id="plan-close" title="Close / cancel plan">✕</button>
+    </div>
+    <div id="plan-body"></div>
+  </div>
+
   <!-- Diff approval overlay — shown when Claude wants to edit a file -->
   <div id="diff-overlay">
     <div id="diff-header">
@@ -683,6 +812,21 @@ const micBtn  = document.getElementById('mic-btn');
 const ttsBtn  = document.getElementById('tts-btn');
 let   isRecording = false;
 let   ttsMuted    = false;
+
+// ── Plan overlay (Phase 10) ───────────────────────────────────────────────
+const planOverlay = document.getElementById('plan-overlay');
+const planGoal    = document.getElementById('plan-goal');
+const planStatus  = document.getElementById('plan-status');
+const planBody    = document.getElementById('plan-body');
+const planClose   = document.getElementById('plan-close');
+const planTasks   = new Map();   // taskId → card element
+let   planRunning = false;
+
+planClose.addEventListener('click', () => {
+  if (planRunning) vscode.postMessage({ type: 'plan-cancel' });
+  planOverlay.classList.remove('visible');
+  planRunning = false;
+});
 
 // ── Diff overlay ──────────────────────────────────────────────────────────
 const diffOverlay = document.getElementById('diff-overlay');
@@ -1021,6 +1165,14 @@ function send() {
   const sess = sessions.get(activeSessId);
   if (!text || !sess || sess.pending) return;
 
+  // ── /plan slash command (Phase 10) ──
+  const planMatch = text.match(/^\/plan\s+(.+)/s);
+  if (planMatch) {
+    inputEl.value = '';
+    vscode.postMessage({ type: 'plan', goal: planMatch[1].trim(), sessionId: activeSessId });
+    return;
+  }
+
   // ── Slash commands for memory ──
   const rememberMatch = text.match(/^\/remember\s+(.+)/s);
   const recallMatch   = text.match(/^\/recall(?:\s+(.+))?/);
@@ -1232,6 +1384,123 @@ window.addEventListener('message', ev => {
       inputEl.style.fontStyle = '';
       inputEl.style.opacity   = '';
       inputEl.placeholder     = 'Ask anything… Claude edits files, Gemma answers fast.';
+      break;
+
+    // ── Plan overlay (Phase 10) ───────────────────────────────────────
+    case 'plan-started':
+      planGoal.textContent = msg.goal;
+      planStatus.textContent = 'Planning…';
+      planBody.innerHTML = '';
+      planTasks.clear();
+      planRunning = true;
+      planOverlay.classList.add('visible');
+      break;
+
+    case 'plan-tasks': {
+      planBody.innerHTML = '';
+      planTasks.clear();
+      const total = msg.tasks.length;
+      planStatus.textContent = `0 / ${total}`;
+      msg.tasks.forEach(t => {
+        const card = document.createElement('div');
+        card.className    = 'plan-task pending';
+        card.dataset.id   = t.id;
+        card.innerHTML = `
+          <div class="plan-task-header">
+            <span class="plan-task-icon">⏳</span>
+            <span class="plan-task-title">${esc(t.title)}</span>
+            <div class="plan-task-actions">
+              <button class="plan-task-btn pause-btn" data-id="${esc(t.id)}" title="Pause before this task">⏸</button>
+            </div>
+          </div>
+          <div class="plan-task-output"></div>`;
+
+        // Toggle output area on header click
+        card.querySelector('.plan-task-header').addEventListener('click', e => {
+          if (e.target.closest('.plan-task-btn')) return;
+          card.querySelector('.plan-task-output').classList.toggle('open');
+        });
+
+        // Pause / resume button
+        card.querySelector('.pause-btn').addEventListener('click', e => {
+          e.stopPropagation();
+          const btn    = e.currentTarget;
+          const paused = btn.dataset.paused === '1';
+          if (paused) {
+            btn.dataset.paused = '0'; btn.textContent = '⏸'; btn.title = 'Pause before this task';
+            vscode.postMessage({ type: 'plan-resume-task', taskId: t.id });
+          } else {
+            btn.dataset.paused = '1'; btn.textContent = '▶'; btn.title = 'Resume this task';
+            vscode.postMessage({ type: 'plan-pause-task', taskId: t.id });
+          }
+        });
+
+        planBody.appendChild(card);
+        planTasks.set(t.id, card);
+      });
+      break;
+    }
+
+    case 'plan-task-update': {
+      const card = planTasks.get(msg.taskId);
+      if (!card) break;
+      const icons = { pending:'⏳', running:'🔄', done:'✅', error:'❌' };
+      card.className = `plan-task ${msg.status}`;
+      card.querySelector('.plan-task-icon').textContent = icons[msg.status] ?? '❓';
+      if (msg.status === 'running') {
+        card.querySelector('.plan-task-output').classList.add('open');
+      }
+      if ((msg.status === 'done' || msg.status === 'error') && msg.output) {
+        const out = card.querySelector('.plan-task-output');
+        if (!out._raw) out._raw = '';
+        out._raw = msg.output;
+        out.innerHTML = renderMarkdown(out._raw);
+        out.classList.add('open');
+      }
+      // Update progress counter
+      const done  = [...planTasks.values()].filter(c => c.classList.contains('done')).length;
+      const total = planTasks.size;
+      planStatus.textContent = `${done} / ${total}`;
+      break;
+    }
+
+    case 'plan-token': {
+      const card = planTasks.get(msg.taskId);
+      if (!card) break;
+      const out = card.querySelector('.plan-task-output');
+      if (!out._raw) out._raw = '';
+      out._raw += msg.text;
+      out.innerHTML = renderMarkdown(out._raw) + '<span class="cursor"></span>';
+      out.scrollTop  = out.scrollHeight;
+      break;
+    }
+
+    case 'plan-tool': {
+      const card = planTasks.get(msg.taskId);
+      if (!card) break;
+      const out = card.querySelector('.plan-task-output');
+      const el  = document.createElement('div');
+      el.className   = 'tool-call';
+      el.textContent = ` ${msg.name}  ${msg.input}`;
+      out.appendChild(el);
+      out.scrollTop  = out.scrollHeight;
+      break;
+    }
+
+    case 'plan-complete':
+      planRunning = false;
+      planStatus.textContent = '✅ Complete';
+      break;
+
+    case 'plan-error':
+      planRunning = false;
+      planStatus.textContent = '❌ Error';
+      if (msg.text) {
+        const errEl = document.createElement('div');
+        errEl.style.cssText = 'color:#f66;font-size:11px;padding:8px 0;';
+        errEl.textContent = msg.text;
+        planBody.appendChild(errEl);
+      }
       break;
   }
 });

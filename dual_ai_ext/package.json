@@ -137,6 +137,11 @@
           "type": "boolean",
           "default": false,
           "description": "Read short Gemma responses aloud using VS Code Speech text-to-speech. Skips code blocks."
+        },
+        "motkra.maxSubAgents": {
+          "type": "number",
+          "default": 4,
+          "description": "Maximum number of subtasks the /plan orchestrator will create and execute."
         }
       }
     }

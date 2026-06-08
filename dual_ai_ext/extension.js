@@ -19,6 +19,7 @@ const memory                = require('./core/memory');
 const ambientWatcher        = require('./ambient/watcher');
 const voice                 = require('./core/voice');
 const indexer               = require('./core/indexer');
+const orchestrator          = require('./core/orchestrator');
 
 const DEFAULT_SYSTEM_PROMPT =
   'You are a coding agent inside VS Code. ' +
@@ -87,6 +88,10 @@ class MoktaProvider {
     this._sttDispose        = null;  // active STT session dispose fn
     this._ttsMuted          = false;
     this._channel           = null;
+    // Phase 10 — orchestration state
+    this._planCancelled     = false;
+    this._pausedTasks       = new Set();
+    this._resumeResolvers   = new Map();
   }
 
   // ── Computed properties ──────────────────────────────────────────────
@@ -281,6 +286,26 @@ class MoktaProvider {
           this._postSystemMsg('All memory for this workspace cleared.');
           break;
         }
+
+        // ── Phase 10 — Multi-agent orchestration ───────────────────────
+        case 'plan':
+          this._onPlan(msg.goal, msg.sessionId);
+          break;
+
+        case 'plan-cancel':
+          this._planCancelled = true;
+          break;
+
+        case 'plan-pause-task':
+          this._pausedTasks.add(msg.taskId);
+          break;
+
+        case 'plan-resume-task': {
+          this._pausedTasks.delete(msg.taskId);
+          const res = this._resumeResolvers.get(msg.taskId);
+          if (res) { res(); this._resumeResolvers.delete(msg.taskId); }
+          break;
+        }
       }
     });
   }
@@ -401,6 +426,68 @@ class MoktaProvider {
     }
 
     this._post(s({ type: 'done' }));
+
+    // 10C-1 — suggest /plan for complex cloud responses
+    if (model === 'cloud' && this._isMultiStep(userText)) {
+      this._post({
+        type:     'proactive',
+        message:  'This looks like a multi-step task. Run it as an orchestrated multi-agent plan?',
+        autoFill: `/plan ${userText}`,
+      });
+    }
+  }
+
+  // ── Multi-step detection (Phase 10C-1) ──────────────────────────────
+
+  _isMultiStep(text) {
+    if (text.length < 80) return false;
+    const seqWords = /\b(then|after that|next step|finally|step\s+[0-9]+|first.{0,20}then|also\b.*and\b|additionally)\b/i;
+    const hasList  = /\n\s*[-*\d]|\n\s*\d+\./;
+    return seqWords.test(text) || hasList.test(text);
+  }
+
+  // ── Orchestration handler (Phase 10) ────────────────────────────────
+
+  async _onPlan(goal, sessionId) {
+    const sid  = (sessionId && this._sessions.has(sessionId)) ? sessionId : this._activeSessId;
+    if (!sid) return;
+
+    const cfg      = vscode.workspace.getConfiguration('motkra');
+    const toolOpts = {
+      allowedCommands: cfg.get('allowedCommands'),
+      terminalTimeout: cfg.get('terminalTimeout'),
+    };
+
+    this._planCancelled   = false;
+    this._pausedTasks.clear();
+    this._resumeResolvers.clear();
+
+    const s = extra => ({ sessionId: sid, ...extra });
+    this._post(s({ type: 'plan-started', goal }));
+
+    try {
+      await orchestrator.runOrchestration(
+        goal,
+        this._systemPrompt,
+        tasks  => this._post(s({ type: 'plan-tasks',       tasks: tasks.map(t => ({ id: t.id, title: t.title })) })),
+        taskId => this._post(s({ type: 'plan-task-update', taskId, status: 'running' })),
+        (taskId, text)   => this._post(s({ type: 'plan-token', taskId, text })),
+        (taskId, n, inp) => this._post(s({ type: 'plan-tool',  taskId, name: n, input: JSON.stringify(inp) })),
+        (taskId, out)    => this._post(s({ type: 'plan-task-update', taskId, status: 'done',  output: out })),
+        (taskId, err)    => this._post(s({ type: 'plan-task-update', taskId, status: 'error', output: err })),
+        ()     => this._post(s({ type: 'plan-complete' })),
+        {
+          model:           cfg.get('claudeModel')   ?? 'claude-opus-4-7',
+          maxSubAgents:    cfg.get('maxSubAgents')  ?? 4,
+          toolOpts,
+          isCancelled:     ()       => this._planCancelled,
+          isPaused:        (taskId) => this._pausedTasks.has(taskId),
+          onPauseResolved: (taskId, resolve) => this._resumeResolvers.set(taskId, resolve),
+        }
+      );
+    } catch (err) {
+      this._post(s({ type: 'plan-error', text: err.message }));
+    }
   }
 
   // ── Agents ───────────────────────────────────────────────────────────
