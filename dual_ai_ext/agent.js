@@ -10,7 +10,11 @@ try { vscode = require('vscode'); } catch { vscode = null; }
 const os = require('os');
 
 const { default: Anthropic } = require('@anthropic-ai/sdk');
-const client = new Anthropic();
+let client = null;
+function getClient() {
+  if (!client) client = new Anthropic();
+  return client;
+}
 
 const { searchWeb, fetchUrl } = require('./core/web');
 
@@ -294,7 +298,7 @@ async function runAgent(history, system, onToken, onTool, onDone, onDiffRequest,
   let fullText = '';
 
   for (let i = 0; i < 10; i++) {
-    const stream = client.messages.stream({
+    const stream = getClient().messages.stream({
       model,
       max_tokens:    16000,
       thinking:      { type: 'adaptive' },

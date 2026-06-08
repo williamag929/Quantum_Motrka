@@ -148,6 +148,11 @@
           "type": "number",
           "default": 7432,
           "description": "Port the Motkra system tray daemon listens on. Used for status checks and future session sync."
+        },
+        "motkra.anthropicApiKey": {
+          "type": "string",
+          "default": "",
+          "description": "Anthropic API key. Only needed if ANTHROPIC_API_KEY is not set in your environment and no .env file is found."
         }
       }
     }

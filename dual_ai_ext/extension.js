@@ -6,9 +6,20 @@ const fs     = require('fs');
 const http   = require('http');
 const { execSync } = require('child_process');
 
-require('dotenv').config({
-  path: path.join(__dirname, '..', 'dual_ai', '.env')
-});
+const os = require('os');
+// Try .env locations in order: dev sibling, user-level, home dir
+for (const p of [
+  path.join(__dirname, '..', 'dual_ai', '.env'),
+  path.join(os.homedir(), '.motkra', '.env'),
+  path.join(os.homedir(), '.env'),
+]) {
+  if (fs.existsSync(p)) { require('dotenv').config({ path: p }); break; }
+}
+// Fall back to VS Code setting if env var still not set
+if (!process.env.ANTHROPIC_API_KEY) {
+  const key = vscode.workspace.getConfiguration('motkra').get('anthropicApiKey', '');
+  if (key) process.env.ANTHROPIC_API_KEY = key;
+}
 
 const { route }             = require('./router');
 const { runAgent }          = require('./agent');
