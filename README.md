@@ -1,6 +1,65 @@
-# Motkra — Multi-platform AI Assistant
+# Motkra — Dual-AI Assistant Ecosystem
 
-A monorepo containing a dual-model AI assistant ecosystem that intelligently routes tasks between a local model (Gemma 4 via Ollama) and Claude (Anthropic API). Entry points span a CLI, VS Code extension, browser extension, and a system tray daemon.
+> **Run Claude and a local Gemma 4 model side-by-side — Motkra picks the right one automatically, across CLI, VS Code, Chrome, and your system tray.**
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+![Python](https://img.shields.io/badge/Python-3.10%2B-blue)
+![Node](https://img.shields.io/badge/Node-18%2B-green)
+
+---
+
+## Why Motkra?
+
+Most developers pick one AI assistant and live with its trade-offs: cloud models are powerful but slow and expensive for short queries; local models are fast and private but struggle with complex tasks. **Motkra eliminates that choice.**
+
+It scores every prompt in real-time and routes it automatically:
+
+- Short or simple → **Gemma 4 (local, instant, free, private)**
+- Complex, creative, or multi-step → **Claude (cloud, powerful)**
+- You can override at any time with `/local`, `/cloud`, or `--local` / `--cloud` flags
+
+All five entry points — Python CLI, VS Code extension, Chrome overlay, Electron system-tray daemon, and Claude Desktop MCP server — share the same routing logic and a single API key.
+
+---
+
+## Demo
+
+<!-- Replace the line below with a real GIF/screenshot once you have one -->
+<!-- ![Motkra demo](docs/demo.gif) -->
+
+> 📸 _Screenshot / GIF coming soon. To contribute one: record a short terminal or UI session and open a PR adding it to `docs/`._
+
+---
+
+## Quick Start
+
+**Prerequisites:** Python 3.10+, Node 18+, [Ollama](https://ollama.com) running locally with `gemma4:e2b` pulled, an [Anthropic API key](https://console.anthropic.com/).
+
+```bash
+# 1. Clone
+git clone https://github.com/williamag929/Quantum_Motrka.git
+cd Quantum_Motrka
+
+# 2. Set your API key
+cp dual_ai/.env.example dual_ai/.env
+# Edit dual_ai/.env and add:  ANTHROPIC_API_KEY=sk-ant-...
+
+# 3. Start the Python CLI (simplest entry point)
+cd dual_ai
+pip install -r requirements.txt
+python main.py
+```
+
+**Example session:**
+
+```
+You: what is 2+2       →  Gemma 4 (local) answers instantly
+You: write a haiku about recursion  →  Claude answers
+You: /local            →  force all queries to Gemma 4
+You: /auto             →  back to smart routing
+```
+
+For the VS Code extension, Chrome extension, system-tray daemon, or MCP server, see the component sections below.
 
 ---
 
