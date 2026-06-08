@@ -153,6 +153,16 @@
           "type": "string",
           "default": "",
           "description": "Anthropic API key. Only needed if ANTHROPIC_API_KEY is not set in your environment and no .env file is found."
+        },
+        "motkra.mcpServer": {
+          "type": "boolean",
+          "default": false,
+          "description": "Spawn the Motkra MCP server on activation, exposing local Ollama models to Claude Desktop and other MCP clients."
+        },
+        "motkra.mcpPort": {
+          "type": "number",
+          "default": 3333,
+          "description": "TCP port the MCP server also listens on (in addition to stdio). Set to 0 to disable TCP."
         }
       }
     }

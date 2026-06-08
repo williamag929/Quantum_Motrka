@@ -86,32 +86,60 @@ function createIcon() {
 
 // ── Public API ────────────────────────────────────────────────────────────
 
+let _emailEnabled  = false;
+let _emailToggleFn = null;
+
 /**
  * @param {Object} callbacks
  * @param {Function} callbacks.onOpenChat
  * @param {Function} callbacks.onOpenVSCode
  * @param {Function} callbacks.onQuit
+ * @param {Function} callbacks.onEmailToggle
  */
-function createTray({ onOpenChat, onOpenVSCode, onQuit }) {
+function createTray({ onOpenChat, onOpenVSCode, onQuit, onEmailToggle }) {
   const icon = createIcon();
+  _emailToggleFn = onEmailToggle;
 
   _tray = new Tray(icon);
   _tray.setToolTip('Motkra — AI Coding Agent');
 
-  const menu = Menu.buildFromTemplate([
-    { label: '🤖 Motkra Chat',           click: onOpenChat  },
-    { label: '⌨  Quick Query  Ctrl+Shift+Space', enabled: false },
-    { type: 'separator' },
-    { label: '📂 Open VS Code',          click: onOpenVSCode },
-    { type: 'separator' },
-    { label: '✕  Quit Motkra',           click: onQuit      },
-  ]);
+  rebuildMenu({ onOpenChat, onOpenVSCode, onQuit });
 
-  _tray.setContextMenu(menu);
   // Single-click on Windows opens chat; on macOS left-click shows menu
   if (process.platform === 'win32') _tray.on('click', onOpenChat);
 
   return _tray;
+}
+
+function rebuildMenu({ onOpenChat, onOpenVSCode, onQuit }) {
+  const emailLabel = _emailEnabled ? '📧 Email Agent  ●  (running)' : '📧 Email Agent  ○  (stopped)';
+  const menu = Menu.buildFromTemplate([
+    { label: '🤖 Motkra Chat',                    click: onOpenChat  },
+    { label: '⌨  Quick Query  Ctrl+Shift+Space',  enabled: false     },
+    { type: 'separator' },
+    {
+      label:   emailLabel,
+      submenu: [
+        {
+          label: _emailEnabled ? 'Stop Email Agent' : 'Start Email Agent',
+          click: () => {
+            _emailEnabled = !_emailEnabled;
+            _emailToggleFn?.();
+            rebuildMenu({ onOpenChat, onOpenVSCode, onQuit });
+          },
+        },
+        { type: 'separator' },
+        { label: 'Email agent monitors your Gmail inbox,', enabled: false },
+        { label: 'triages messages with Claude, and replies', enabled: false },
+        { label: 'based on your contact trust levels.',      enabled: false },
+      ],
+    },
+    { type: 'separator' },
+    { label: '📂 Open VS Code',                   click: onOpenVSCode },
+    { type: 'separator' },
+    { label: '✕  Quit Motkra',                    click: onQuit      },
+  ]);
+  _tray.setContextMenu(menu);
 }
 
 module.exports = { createTray };

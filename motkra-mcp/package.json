@@ -1,0 +1,12 @@
+{
+  "name": "motkra-mcp",
+  "version": "0.1.0",
+  "description": "Motkra MCP server — expose local Ollama models to Claude Desktop and other MCP clients",
+  "main": "index.js",
+  "bin": { "motkra-mcp": "./index.js" },
+  "scripts": {
+    "start": "node index.js"
+  },
+  "engines": { "node": ">=18" },
+  "dependencies": {}
+}

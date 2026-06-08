@@ -18,8 +18,9 @@ for (const loc of ENV_CANDIDATES) {
   if (fs.existsSync(loc)) { require('dotenv').config({ path: loc }); break; }
 }
 
-const tray  = require('./tray');
-const ipc   = require('./ipc');
+const tray    = require('./tray');
+const ipc     = require('./ipc');
+const monitor = require('./email/monitor');
 
 // ── Single instance lock ──────────────────────────────────────────────────
 
@@ -114,6 +115,61 @@ ipcMain.handle('get-config', () => ({
   hasApiKey: !!process.env.ANTHROPIC_API_KEY,
 }));
 
+// ── Email notification window IPC (Phase 17) ──────────────────────────────────
+
+let notifyWin = null;
+
+function createNotifyWindow(email, result) {
+  if (notifyWin && !notifyWin.isDestroyed()) {
+    notifyWin.webContents.send('email-notify', { email, result });
+    if (!notifyWin.isVisible()) notifyWin.show();
+    notifyWin.focus();
+    return;
+  }
+
+  notifyWin = new BrowserWindow({
+    width:          420,
+    height:         420,
+    frame:          false,
+    alwaysOnTop:    true,
+    skipTaskbar:    true,
+    resizable:      false,
+    show:           false,
+    webPreferences: {
+      nodeIntegration:  true,
+      contextIsolation: false,
+    },
+  });
+
+  notifyWin.loadFile(path.join(__dirname, 'email', 'notify-window.html'));
+
+  notifyWin.once('ready-to-show', () => {
+    // Position bottom-right corner
+    const { screen } = require('electron');
+    const { width: sw, height: sh } = screen.getPrimaryDisplay().workArea;
+    const [ww, wh] = notifyWin.getSize();
+    notifyWin.setPosition(sw - ww - 16, sh - wh - 16);
+    notifyWin.show();
+    notifyWin.focus();
+    notifyWin.webContents.send('email-notify', { email, result });
+  });
+
+  notifyWin.on('closed', () => { notifyWin = null; });
+}
+
+ipcMain.on('email-action', async (_ev, { type, email, draft }) => {
+  if (type === 'send' && email && draft) {
+    try {
+      const { send } = require('./email/gmail');
+      await send(email.from, `Re: ${email.subject}`, draft, email.threadId);
+      console.log('[email] sent from notification window to', email.from);
+    } catch (e) {
+      console.error('[email] send error:', e.message);
+    }
+  }
+  // ignore / flag — no further action needed from this side
+});
+
 // ── App lifecycle ─────────────────────────────────────────────────────────
 
 app.whenReady().then(() => {
@@ -126,10 +182,16 @@ app.whenReady().then(() => {
 
   // System tray icon and context menu
   tray.createTray({
-    onOpenChat:   createChatWindow,
-    onOpenVSCode: () => shell.openExternal('vscode://'),
-    onQuit:       () => app.quit(),
+    onOpenChat:    createChatWindow,
+    onOpenVSCode:  () => shell.openExternal('vscode://'),
+    onQuit:        () => app.quit(),
+    onEmailToggle: toggleEmailMonitor,
   });
+
+  // ── Email monitor (Phase 17) — start if enabled ──────────────────────
+  if (process.env.MOTKRA_EMAIL_ENABLED === '1') {
+    startEmailMonitor();
+  }
 
   // Global hotkey — Ctrl+Shift+Space (configurable via env var)
   const hotkey = process.env.MOTKRA_HOTKEY ?? 'CommandOrControl+Shift+Space';
@@ -146,9 +208,41 @@ app.on('second-instance', () => {
   createChatWindow();
 });
 
+// ── Email monitor helpers ─────────────────────────────────────────────────────
+
+let _emailRunning = false;
+
+function startEmailMonitor() {
+  if (_emailRunning) return;
+  _emailRunning = true;
+  const intervalSec = parseInt(process.env.MOTKRA_EMAIL_INTERVAL ?? '120', 10);
+  monitor.start({
+    intervalSec,
+    notifyFn: ({ type, email, result }) => {
+      // trust level lookup for the notification window
+      const { getTrust } = require('./email/contacts');
+      const trust = getTrust(email.from);
+      createNotifyWindow(email, { ...result, trust });
+    },
+  }).catch(e => {
+    console.error('[email] monitor start error:', e.message);
+    _emailRunning = false;
+  });
+}
+
+function stopEmailMonitor() {
+  monitor.stop();
+  _emailRunning = false;
+}
+
+function toggleEmailMonitor() {
+  if (_emailRunning) { stopEmailMonitor(); } else { startEmailMonitor(); }
+}
+
 app.on('will-quit', () => {
   globalShortcut.unregisterAll();
   ipc.stopServer();
+  if (_emailRunning) monitor.stop();
 });
 
 // Keep running even if all windows are closed (tray app behaviour)

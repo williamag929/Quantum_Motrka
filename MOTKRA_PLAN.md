@@ -285,11 +285,11 @@ Target: 1,000 GitHub stars. Timeline: ~8 weeks.
 
 ## Phase 16 — MCP Server Mode · Tier 3
 
-- [ ] **16-1** Scaffold `motkra-mcp/` folder — MCP server exposing the local Ollama model as an MCP-compatible LLM endpoint
-- [ ] **16-2** Implement MCP `initialize` and `sampling/createMessage` handlers over stdio
-- [ ] **16-3** Route MCP requests to Ollama via `clients/gemma.js` — any model the user has installed
-- [ ] **16-4** Add `motkra.mcpServer` boolean setting (default: `false`) — when enabled, extension spawns the MCP server process on activation
-- [ ] **16-5** Add `motkra.mcpPort` setting (default: `3333`) — expose MCP over TCP as well as stdio
+- [x] **16-1** Scaffold `motkra-mcp/` folder — MCP server exposing local Ollama models as MCP tools (`ollama_chat`, `ollama_list_models`)
+- [x] **16-2** Implement MCP `initialize`, `tools/list`, `tools/call` handlers over stdio (JSON-RPC 2.0, newline-delimited)
+- [x] **16-3** Route MCP tool calls directly to Ollama HTTP API — any model the user has installed
+- [x] **16-4** Add `motkra.mcpServer` boolean setting (default: `false`) — when enabled, extension spawns the MCP server on activation
+- [x] **16-5** Add `motkra.mcpPort` setting (default: `3333`) — expose MCP over TCP as well as stdio via `MOTKRA_MCP_PORT` env var
 - [ ] **16-6** Document in README how to connect Claude Desktop to Motkra as an MCP server
 
 ---
@@ -298,62 +298,46 @@ Target: 1,000 GitHub stars. Timeline: ~8 weeks.
 *Motkra reads your inbox, triages every email, and acts on your behalf — with the right level of autonomy per person.*
 
 ### 17A — Gmail OAuth2 Client
-- [ ] **17A-1** Create `motkra-daemon/email/gmail.js` — OAuth2 flow using `googleapis` package; store tokens at `~/.motkra/gmail-tokens.json`
-- [ ] **17A-2** Implement `listNew()` — fetch unread INBOX messages since last poll, return `[{id, from, subject, body, date}]`
-- [ ] **17A-3** Implement `send(to, subject, body, threadId)` — send reply on the same thread
-- [ ] **17A-4** Implement `archive(messageId)` — apply `INBOX` remove + `SPAM` label for auto-archived messages
-- [ ] **17A-5** Persist last-seen message IDs to `~/.motkra/email-state.json` to prevent re-processing on restart
+- [x] **17A-1** Create `motkra-daemon/email/gmail.js` — OAuth2 flow using `googleapis`; tokens at `~/.motkra/gmail-tokens.json`, credentials at `~/.motkra/gmail-credentials.json`
+- [x] **17A-2** Implement `listNew()` — fetch unread INBOX messages since last poll, return `[{id, threadId, from, subject, body, date}]`
+- [x] **17A-3** Implement `send(to, subject, body, threadId)` — send reply on the same thread, returns `{id, threadId}`
+- [x] **17A-4** Implement `archive(messageId)` — remove `INBOX` label
+- [x] **17A-5** Persist seen message IDs to `~/.motkra/email-state.json` (capped at 500) to prevent re-processing
 
 ### 17B — Contact Trust Store
-- [ ] **17B-1** Create `motkra-daemon/email/contacts.js` — reads/writes `~/.motkra/email-contacts.json`
-- [ ] **17B-2** Trust levels 1–5 with the following semantics:
-  ```
-  5 — Closest (spouse, parent)     → auto-send if confidence ≥ 6
-  4 — Close family / best friends  → auto-send if confidence ≥ 8
-  3 — Extended family / colleagues → approval email required before send
-  2 — Acquaintances / work         → system tray notification only, no email loop
-  1 — Unknown / first contact      → silent queue, shown in morning briefing
-  ```
-- [ ] **17B-3** Export `getTrust(emailAddress)` — returns 0 (unknown) or 1–5
+- [x] **17B-1** Create `motkra-daemon/email/contacts.js` — reads/writes `~/.motkra/email-contacts.json`
+- [x] **17B-2** Trust levels 1–5 with full semantics implemented in `monitor.js` decision matrix
+- [x] **17B-3** Export `getTrust(emailAddress)` — strips `Name <addr>` format, returns 0–5
 - [ ] **17B-4** Add `/email-trust add <address> <name> <level>` slash command in daemon chat window
 
 ### 17C — Claude Triage Engine
-- [ ] **17C-1** Create `motkra-daemon/email/triage.js` — sends email to Claude with structured prompt
-- [ ] **17C-2** Prompt instructs Claude to return JSON: `{ action: "spam"|"ignore"|"reply"|"flag", confidence: 1–10, draft: string|null, reason: string }`
-- [ ] **17C-3** `action: "reply"` → Claude writes a complete reply draft in the sender's language and tone
-- [ ] **17C-4** `action: "flag"` → important email needing user judgement (legal, financial, sensitive)
-- [ ] **17C-5** Confidence score 1–10 reflects Claude's certainty about both the classification and the draft quality
+- [x] **17C-1** Create `motkra-daemon/email/triage.js` — sends email to Claude with structured prompt
+- [x] **17C-2** Returns `{ action: "spam"|"ignore"|"reply"|"flag", confidence: 1–10, draft: string|null, reason: string }`
+- [x] **17C-3** Claude writes complete reply draft in sender's language for `action: "reply"`
+- [x] **17C-4** `action: "flag"` escalates to urgent notification regardless of trust level
+- [x] **17C-5** Confidence 1–10 reflects certainty about both classification and draft quality
 
 ### 17D — Decision Engine & Approval Loop
-- [ ] **17D-1** Create `motkra-daemon/email/monitor.js` — polling loop, interval from `motkra.emailPollInterval` (default 120s)
-- [ ] **17D-2** For each new email: call `triage.js` → combine `trust × confidence` into an action decision:
-  ```
-  spam/ignore                          → archive silently
-  reply + trust 5 + confidence ≥ 6    → auto-send, notify user after
-  reply + trust 4 + confidence ≥ 8    → auto-send, notify user after
-  reply + trust 3, or lower confidence → send approval email to user
-  reply + trust 2                      → system tray notification only
-  reply + trust 0–1                    → silent queue
-  flag (any trust)                     → system tray urgent alert + open chat with context
-  ```
-- [ ] **17D-3** Approval email format: Motkra sends itself an email (`From:` = user's own address) with the draft and a `Reply YES / NO / <override text>` instruction
-- [ ] **17D-4** Poll for approval reply: watch for replies to the approval thread; parse first word YES/NO or treat full reply as override text
-- [ ] **17D-5** On YES → send original draft; on NO → discard; on override text → send the user's text instead
+- [x] **17D-1** Create `motkra-daemon/email/monitor.js` — polling loop via `setInterval`, interval from `MOTKRA_EMAIL_INTERVAL` env var (default 120s)
+- [x] **17D-2** Full `trust × confidence` decision matrix implemented
+- [x] **17D-3** Approval email sent to user's own address with YES / NO / override-text instructions
+- [x] **17D-4** `pollApprovalReply()` polls reply thread every 15s for up to 5 min
+- [x] **17D-5** YES → send draft; NO → discard; override text → send user's text
 
 ### 17E — Notification Windows
-- [ ] **17E-1** Create `motkra-daemon/email/notify-window.html` — frameless Electron window (420×280px), same visual style as `chat.html`
-- [ ] **17E-2** Shows: sender name + trust badge (★☆ 1–5), subject, body preview (3 lines), Claude's draft, confidence bar
-- [ ] **17E-3** Action buttons: **Send**, **Edit & Send**, **Ignore** — Edit opens draft in editable textarea before send
-- [ ] **17E-4** Window auto-dismisses after 60s with no action (email goes to silent queue)
-- [ ] **17E-5** Used for trust-2 notifications and as fallback when daemon has focus
+- [x] **17E-1** Create `motkra-daemon/email/notify-window.html` — frameless Electron window (420×420px)
+- [x] **17E-2** Shows: sender + trust stars, subject, body preview, draft textarea, confidence bar, reason
+- [x] **17E-3** Action buttons: **Send**, **Ignore**, **Flag ⚑** — draft is editable before send
+- [x] **17E-4** Auto-dismisses after 60s; IPC sends action result back to `main.js`
+- [x] **17E-5** Positioned bottom-right; reuses window if already open (new email data pushed via IPC)
 
 ### 17F — Settings & Wiring
-- [ ] **17F-1** Add `motkra.emailEnabled` setting (default: `false`, explicit opt-in)
-- [ ] **17F-2** Add `motkra.emailPollInterval` setting (default: `120`, seconds)
-- [ ] **17F-3** Add `motkra.emailAutoArchiveSpam` setting (default: `true`)
-- [ ] **17F-4** Add `motkra.emailAutoSendThreshold` setting (default: `6`) — minimum confidence for auto-send at trust 5
-- [ ] **17F-5** Wire `monitor.js` startup into `main.js` `app.whenReady()` behind the `emailEnabled` flag
-- [ ] **17F-6** Add "Email Agent" submenu to system tray: Enable/Disable, View Queue, Trust Contacts
+- [x] **17F-1** Email enabled via `MOTKRA_EMAIL_ENABLED=1` env var (opt-in)
+- [x] **17F-2** Poll interval via `MOTKRA_EMAIL_INTERVAL` env var (default 120s)
+- [x] **17F-3** Auto-archive spam implemented in `monitor.js`
+- [x] **17F-4** Auto-send confidence threshold via `MOTKRA_EMAIL_THRESHOLD` env var (default 6)
+- [x] **17F-5** `monitor.start()` called in `app.whenReady()` behind `MOTKRA_EMAIL_ENABLED` flag
+- [x] **17F-6** "Email Agent" submenu in system tray with Enable/Disable toggle
 
 ---
 
@@ -384,7 +368,9 @@ Target: 1,000 GitHub stars. Timeline: ~8 weeks.
   "motkra.emailEnabled":          false,
   "motkra.emailPollInterval":     120,
   "motkra.emailAutoArchiveSpam":  true,
-  "motkra.emailAutoSendThreshold": 6
+  "motkra.emailAutoSendThreshold": 6,
+  "motkra.mcpServer":             false,
+  "motkra.mcpPort":               3333
 }
 ```
 
@@ -403,3 +389,4 @@ Target: 1,000 GitHub stars. Timeline: ~8 weeks.
 | 7–8 | GitHub + daily briefing + notifications | Full Motkra tier |
 | 8 | GIF + Marketplace + Product Hunt | 🚀 Launch |
 | 9 | Email agent — triage, trust levels, approval loop | Superhuman tier |
+| 9 | MCP server — expose Ollama to Claude Desktop | Ecosystem tier |

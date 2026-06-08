@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Motkra — Email</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 13px;
+    background: #1e1e2e;
+    color: #cdd6f4;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    user-select: none;
+  }
+
+  /* ── Drag bar ── */
+  #drag-bar {
+    -webkit-app-region: drag;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 12px;
+    background: #181825;
+    border-bottom: 1px solid #313244;
+    flex-shrink: 0;
+  }
+  #drag-title { font-size: 11px; opacity: 0.6; font-weight: 600; letter-spacing: 0.06em; }
+  #close-btn {
+    -webkit-app-region: no-drag;
+    background: none; border: none; color: #cdd6f4;
+    opacity: 0.4; cursor: pointer; font-size: 14px; padding: 0 2px; line-height: 1;
+  }
+  #close-btn:hover { opacity: 1; }
+
+  /* ── Email header ── */
+  #email-header {
+    padding: 12px 14px 10px;
+    border-bottom: 1px solid #313244;
+    flex-shrink: 0;
+  }
+  #from-row { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+  #trust-badge {
+    font-size: 10px;
+    padding: 1px 6px;
+    border-radius: 8px;
+    background: #313244;
+    color: #89b4fa;
+    flex-shrink: 0;
+    font-weight: 600;
+  }
+  #from-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #from-addr { font-size: 11px; opacity: 0.5; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #subject   { font-size: 12px; opacity: 0.8; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* ── Body preview ── */
+  #body-preview {
+    flex: 1;
+    overflow-y: auto;
+    padding: 10px 14px;
+    font-size: 12px;
+    line-height: 1.6;
+    opacity: 0.75;
+    white-space: pre-wrap;
+    word-break: break-word;
+    border-bottom: 1px solid #313244;
+  }
+
+  /* ── Draft section ── */
+  #draft-section { padding: 10px 14px; flex-shrink: 0; }
+  #draft-label { font-size: 10px; opacity: 0.5; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 6px; }
+  #draft-box {
+    width: 100%;
+    min-height: 70px;
+    max-height: 120px;
+    resize: vertical;
+    background: #313244;
+    color: #cdd6f4;
+    border: 1px solid #45475a;
+    border-radius: 4px;
+    padding: 6px 8px;
+    font-family: inherit;
+    font-size: 12px;
+    line-height: 1.5;
+    outline: none;
+  }
+  #draft-box:focus { border-color: #89b4fa; }
+
+  /* ── Confidence bar ── */
+  #conf-row { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+  #conf-label { font-size: 10px; opacity: 0.5; flex-shrink: 0; }
+  #conf-bar { flex: 1; height: 4px; background: #313244; border-radius: 2px; overflow: hidden; }
+  #conf-fill { height: 100%; background: #a6e3a1; border-radius: 2px; transition: width .3s; }
+  #conf-val  { font-size: 10px; opacity: 0.55; flex-shrink: 0; }
+  #reason-text { font-size: 11px; opacity: 0.5; margin-top: 4px; font-style: italic; }
+
+  /* ── Action buttons ── */
+  #actions {
+    display: flex;
+    gap: 8px;
+    padding: 10px 14px 12px;
+    flex-shrink: 0;
+    border-top: 1px solid #313244;
+  }
+  button {
+    flex: 1; border: none; border-radius: 4px;
+    padding: 7px 10px; cursor: pointer; font-size: 12px; font-weight: 600;
+    transition: opacity .15s;
+  }
+  button:hover { opacity: 0.85; }
+  #btn-send   { background: #a6e3a1; color: #1e1e2e; }
+  #btn-ignore { background: #313244; color: #cdd6f4; }
+  #btn-flag   { background: #f38ba8; color: #1e1e2e; }
+</style>
+</head>
+<body>
+
+<div id="drag-bar">
+  <span id="drag-title">📧 MOTKRA EMAIL</span>
+  <button id="close-btn" title="Dismiss">✕</button>
+</div>
+
+<div id="email-header">
+  <div id="from-row">
+    <span id="trust-badge">★ 0</span>
+    <span id="from-name">—</span>
+  </div>
+  <div id="from-addr"></div>
+  <div id="subject"></div>
+</div>
+
+<div id="body-preview"></div>
+
+<div id="draft-section">
+  <div id="draft-label">Suggested reply</div>
+  <textarea id="draft-box" spellcheck="true"></textarea>
+  <div id="conf-row">
+    <span id="conf-label">Confidence</span>
+    <div id="conf-bar"><div id="conf-fill" style="width:50%"></div></div>
+    <span id="conf-val">5/10</span>
+  </div>
+  <div id="reason-text"></div>
+</div>
+
+<div id="actions">
+  <button id="btn-send">Send</button>
+  <button id="btn-ignore">Ignore</button>
+  <button id="btn-flag">Flag ⚑</button>
+</div>
+
+<script>
+const { ipcRenderer } = require('electron');
+
+let _email  = null;
+let _result = null;
+
+// Receive email data from main process
+ipcRenderer.on('email-notify', (_ev, { email, result }) => {
+  _email  = email;
+  _result = result;
+
+  const trustNum  = parseInt(document.getElementById('trust-badge').dataset.trust ?? '0', 10);
+  const fromMatch = email.from.match(/^(.+?)\s*<(.+)>$/) ?? [null, email.from, email.from];
+  const fromName  = fromMatch[1].replace(/^"|"$/g, '').trim();
+  const fromAddr  = fromMatch[2];
+
+  document.getElementById('trust-badge').textContent = '★'.repeat(result.trust ?? 0) + ` ${result.trust ?? 0}`;
+  document.getElementById('from-name').textContent   = fromName;
+  document.getElementById('from-addr').textContent   = fromAddr;
+  document.getElementById('subject').textContent     = email.subject;
+  document.getElementById('body-preview').textContent = email.body?.slice(0, 400) ?? '';
+
+  const draft = result.draft ?? '';
+  document.getElementById('draft-box').value = draft;
+
+  const conf = result.confidence ?? 5;
+  document.getElementById('conf-fill').style.width = `${conf * 10}%`;
+  document.getElementById('conf-val').textContent  = `${conf}/10`;
+  document.getElementById('reason-text').textContent = result.reason ?? '';
+
+  // Colour-code confidence bar
+  const fill = document.getElementById('conf-fill');
+  fill.style.background = conf >= 7 ? '#a6e3a1' : conf >= 4 ? '#fab387' : '#f38ba8';
+
+  // For flag events, hide Send and show prominent Flag button
+  if (result.action === 'flag') {
+    document.getElementById('btn-send').style.display = 'none';
+    document.getElementById('draft-section').style.display = 'none';
+  }
+});
+
+document.getElementById('btn-send').addEventListener('click', () => {
+  const draft = document.getElementById('draft-box').value.trim();
+  ipcRenderer.send('email-action', { type: 'send', email: _email, draft });
+  window.close();
+});
+
+document.getElementById('btn-ignore').addEventListener('click', () => {
+  ipcRenderer.send('email-action', { type: 'ignore', email: _email });
+  window.close();
+});
+
+document.getElementById('btn-flag').addEventListener('click', () => {
+  ipcRenderer.send('email-action', { type: 'flag', email: _email });
+  window.close();
+});
+
+document.getElementById('close-btn').addEventListener('click', () => {
+  ipcRenderer.send('email-action', { type: 'ignore', email: _email });
+  window.close();
+});
+
+// Auto-dismiss after 60s if no action taken
+setTimeout(() => {
+  ipcRenderer.send('email-action', { type: 'ignore', email: _email });
+  window.close();
+}, 60_000);
+</script>
+</body>
+</html>

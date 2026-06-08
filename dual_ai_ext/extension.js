@@ -1,10 +1,10 @@
 'use strict';
 
-const vscode = require('vscode');
-const path   = require('path');
-const fs     = require('fs');
-const http   = require('http');
-const { execSync } = require('child_process');
+const vscode  = require('vscode');
+const path    = require('path');
+const fs      = require('fs');
+const http    = require('http');
+const { execSync, spawn } = require('child_process');
 
 const os = require('os');
 // Try .env locations in order: dev sibling, user-level, home dir
@@ -806,6 +806,22 @@ function activate(context) {
       provider._out().appendLine('[Motkra] Daemon connected on port ' + port);
     }
   });
+
+  // ── Phase 16 — MCP server (optional) ────────────────────────────────
+  if (cfg.get('mcpServer', false)) {
+    const mcpIndex = path.join(context.extensionPath, '..', 'motkra-mcp', 'index.js');
+    if (fs.existsSync(mcpIndex)) {
+      const mcpPort = cfg.get('mcpPort', 3333);
+      const env     = { ...process.env, MOTKRA_MCP_PORT: mcpPort > 0 ? String(mcpPort) : '' };
+      const proc    = spawn('node', [mcpIndex], { env, stdio: ['ignore', 'ignore', 'pipe'] });
+      proc.stderr.on('data', d => provider._out().appendLine(`[MCP] ${d.toString().trimEnd()}`));
+      proc.on('exit', code => provider._out().appendLine(`[MCP] Server exited (${code})`));
+      context.subscriptions.push({ dispose: () => { try { proc.kill(); } catch {} } });
+      provider._out().appendLine(`[Motkra] MCP server started — TCP port ${mcpPort}`);
+    } else {
+      provider._out().appendLine('[Motkra] MCP server not found at ' + mcpIndex);
+    }
+  }
 }
 
 function deactivate() {}
