@@ -1,0 +1,14 @@
+{
+  "name": "motkra-browser",
+  "version": "0.1.0",
+  "description": "Motkra browser extension — Ask AI about any webpage",
+  "scripts": {
+    "postinstall": "node scripts/generate-icons.js",
+    "icons":       "node scripts/generate-icons.js",
+    "build":       "node scripts/generate-icons.js && node scripts/pack.js",
+    "lint":        "node --check background.js content.js popup.js"
+  },
+  "devDependencies": {
+    "archiver": "^7.0.0"
+  }
+}

@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Motkra</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    width: 300px;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 13px;
+    background: #1e1e1e;
+    color: #cccccc;
+  }
+
+  /* Header */
+  #hdr {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 14px 10px;
+    background: #252526;
+    border-bottom: 1px solid #333;
+  }
+  #hdr-name { font-size: 13px; font-weight: 700; color: #00bc88; letter-spacing: .06em; text-transform: uppercase; }
+  #hdr-ver  { font-size: 10px; color: #555; }
+
+  /* Daemon status */
+  #status-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    border-bottom: 1px solid #2a2a2a;
+  }
+  #status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #555;
+    flex-shrink: 0;
+    transition: background .3s;
+  }
+  #status-dot.ok  { background: #4caf50; }
+  #status-dot.err { background: #f48771; }
+  #status-text { font-size: 11px; color: #888; flex: 1; }
+  #status-text.ok  { color: #7db97d; }
+  #status-text.err { color: #f48771; }
+  #check-btn {
+    background: none;
+    border: 1px solid #444;
+    color: #888;
+    border-radius: 3px;
+    padding: 2px 8px;
+    cursor: pointer;
+    font-size: 10px;
+  }
+  #check-btn:hover { border-color: #007acc; color: #9cdcfe; }
+
+  /* Settings */
+  #settings { padding: 10px 14px; border-bottom: 1px solid #2a2a2a; }
+  #settings label { display: flex; align-items: center; gap: 8px; font-size: 11px; color: #888; }
+  #port-inp {
+    width: 70px;
+    background: #3c3c3c;
+    color: #ccc;
+    border: 1px solid #555;
+    border-radius: 3px;
+    padding: 3px 6px;
+    font-size: 12px;
+    outline: none;
+  }
+  #port-inp:focus { border-color: #007acc; }
+  #save-btn {
+    background: #007acc;
+    color: #fff;
+    border: none;
+    border-radius: 3px;
+    padding: 3px 10px;
+    cursor: pointer;
+    font-size: 11px;
+  }
+  #save-btn:hover { background: #1177bb; }
+
+  /* Quick ask */
+  #quick { padding: 10px 14px; border-bottom: 1px solid #2a2a2a; }
+  #quick-label { font-size: 10px; color: #666; text-transform: uppercase; letter-spacing: .05em; margin-bottom: 6px; }
+  #quick-row { display: flex; gap: 6px; }
+  #quick-inp {
+    flex: 1;
+    background: #3c3c3c;
+    color: #ccc;
+    border: 1px solid #555;
+    border-radius: 3px;
+    padding: 5px 8px;
+    font-size: 12px;
+    outline: none;
+    font-family: inherit;
+  }
+  #quick-inp:focus { border-color: #007acc; }
+  #quick-send {
+    background: #007acc;
+    color: #fff;
+    border: none;
+    border-radius: 3px;
+    padding: 5px 12px;
+    cursor: pointer;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+  #quick-send:hover { background: #1177bb; }
+  #quick-send:disabled { opacity: .4; cursor: default; }
+  #quick-out {
+    margin-top: 8px;
+    font-size: 11px;
+    line-height: 1.55;
+    color: #aaa;
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 150px;
+    overflow-y: auto;
+    display: none;
+  }
+  #quick-out.visible { display: block; }
+
+  /* Footer */
+  #footer {
+    padding: 8px 14px;
+    font-size: 10px;
+    color: #444;
+    text-align: center;
+  }
+  #footer a { color: #007acc; text-decoration: none; cursor: pointer; }
+  #footer a:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+
+<div id="hdr">
+  <span id="hdr-name">🤖 Motkra</span>
+  <span id="hdr-ver">v0.1.0</span>
+</div>
+
+<div id="status-row">
+  <div id="status-dot"></div>
+  <span id="status-text">Checking daemon…</span>
+  <button id="check-btn">↻</button>
+</div>
+
+<div id="settings">
+  <label>
+    Daemon port:
+    <input id="port-inp" type="number" min="1024" max="65535" value="7432">
+    <button id="save-btn">Save</button>
+  </label>
+</div>
+
+<div id="quick">
+  <div id="quick-label">Quick ask</div>
+  <div id="quick-row">
+    <input id="quick-inp" placeholder="Ask anything…" type="text">
+    <button id="quick-send">Ask</button>
+  </div>
+  <div id="quick-out"></div>
+</div>
+
+<div id="footer">
+  Motkra browser extension ·
+  <a id="daemon-link">daemon at port <span id="daemon-port-show">7432</span></a>
+</div>
+
+<script src="popup.js"></script>
+</body>
+</html>
