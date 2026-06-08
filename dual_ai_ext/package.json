@@ -1,0 +1,118 @@
+{
+  "name": "motkra",
+  "displayName": "Motkra",
+  "description": "Privacy-first AI coding agent — Claude (cloud) + any local model via Ollama",
+  "version": "0.1.0",
+  "publisher": "local",
+  "engines": { "vscode": "^1.80.0" },
+  "categories": ["Other"],
+  "activationEvents": [],
+  "main": "./extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "motkra",
+          "title": "Motkra",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "motkra": [
+        {
+          "type": "webview",
+          "id": "motkra.panel",
+          "name": "Chat"
+        }
+      ]
+    },
+    "commands": [
+      { "command": "motkra.sendSelection",  "title": "Motkra: Send Selection"          },
+      { "command": "motkra.fixSelection",   "title": "Motkra: Fix This Code"            },
+      { "command": "motkra.reloadAgents",   "title": "Motkra: Reload Agents"            },
+      { "command": "motkra.commitMessage",  "title": "Motkra: Generate Commit Message"  },
+      { "command": "motkra.explainDiff",    "title": "Motkra: Explain Diff"             },
+      { "command": "motkra.reviewPR",       "title": "Motkra: Review PR"                }
+    ],
+    "keybindings": [
+      {
+        "command": "workbench.view.extension.motkra",
+        "key": "ctrl+shift+j",
+        "mac": "cmd+shift+j",
+        "when": "!motkra.panelFocused"
+      }
+    ],
+    "menus": {
+      "editor/context": [
+        { "command": "motkra.sendSelection", "when": "editorHasSelection", "group": "motkra@1" },
+        { "command": "motkra.fixSelection",  "when": "editorHasSelection", "group": "motkra@2" }
+      ]
+    },
+    "configuration": {
+      "title": "Motkra",
+      "properties": {
+        "motkra.claudeModel": {
+          "type": "string",
+          "default": "claude-opus-4-7",
+          "description": "Anthropic model ID used for cloud requests."
+        },
+        "motkra.ollamaHost": {
+          "type": "string",
+          "default": "localhost",
+          "description": "Hostname where Ollama is running."
+        },
+        "motkra.ollamaPort": {
+          "type": "number",
+          "default": 11434,
+          "description": "Port where Ollama is listening."
+        },
+        "motkra.privacyScan": {
+          "type": "boolean",
+          "default": true,
+          "description": "Scan messages for secrets/credentials and force local model if found."
+        },
+        "motkra.terminalTimeout": {
+          "type": "number",
+          "default": 30,
+          "description": "Timeout in seconds for the run_command agent tool."
+        },
+        "motkra.allowedCommands": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": ["npm", "npx", "python", "python3", "pytest", "git", "node"],
+          "description": "Executables the terminal tool is allowed to run."
+        },
+        "motkra.proactiveErrors": {
+          "type": "boolean",
+          "default": true,
+          "description": "Suggest fixes when VS Code diagnostics report errors on save."
+        },
+        "motkra.proactiveTerminal": {
+          "type": "boolean",
+          "default": true,
+          "description": "Detect crashes in terminal output and offer to diagnose them."
+        },
+        "motkra.stuckDetection": {
+          "type": "boolean",
+          "default": true,
+          "description": "Offer a second pair of eyes when you edit the same code region repeatedly."
+        },
+        "motkra.inlineCompletions": {
+          "type": "boolean",
+          "default": false,
+          "description": "Show ghost-text inline completions powered by the local Ollama model."
+        },
+        "motkra.defaultLocalModel": {
+          "type": "string",
+          "default": "gemma4:e2b",
+          "description": "Default local Ollama model for completions and fast responses."
+        }
+      }
+    }
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.40.0",
+    "dotenv": "^16.0.0"
+  }
+}

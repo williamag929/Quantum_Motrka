@@ -1,0 +1,27 @@
+# Secrets
+.env
+*.env.local
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+*.egg-info/
+dist/
+.pytest_cache/
+
+# Node / VS Code extension
+dual_ai_ext/node_modules/
+dual_ai_ext/*.vsix
+dual_ai_ext/.vscode/
+
+# Motkra runtime data
+.motkra/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Misc
+*.lua
