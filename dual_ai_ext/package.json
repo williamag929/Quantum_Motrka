@@ -33,7 +33,8 @@
       { "command": "motkra.reloadAgents",   "title": "Motkra: Reload Agents"            },
       { "command": "motkra.commitMessage",  "title": "Motkra: Generate Commit Message"  },
       { "command": "motkra.explainDiff",    "title": "Motkra: Explain Diff"             },
-      { "command": "motkra.reviewPR",       "title": "Motkra: Review PR"                }
+      { "command": "motkra.reviewPR",       "title": "Motkra: Review PR"                },
+      { "command": "motkra.daemonStatus",  "title": "Motkra: Daemon Status"            }
     ],
     "keybindings": [
       {
@@ -142,6 +143,11 @@
           "type": "number",
           "default": 4,
           "description": "Maximum number of subtasks the /plan orchestrator will create and execute."
+        },
+        "motkra.daemonPort": {
+          "type": "number",
+          "default": 7432,
+          "description": "Port the Motkra system tray daemon listens on. Used for status checks and future session sync."
         }
       }
     }

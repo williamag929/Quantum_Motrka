@@ -605,6 +605,28 @@ class MoktaProvider {
   }
 }
 
+// ── Daemon connectivity (Phase 11) ─────────────────────────────────────────
+
+/**
+ * Check whether the Motkra daemon is running on the given port.
+ * @param {number}   port
+ * @param {Function} callback  (running: boolean) → void
+ */
+function checkDaemon(port, callback) {
+  const req = http.get(`http://127.0.0.1:${port}/status`, res => {
+    let body = '';
+    res.on('data', c => { body += c; });
+    res.on('end', () => {
+      try {
+        const data = JSON.parse(body);
+        callback(data.status === 'ok');
+      } catch { callback(false); }
+    });
+  });
+  req.setTimeout(2000, () => { req.destroy(); callback(false); });
+  req.on('error', () => callback(false));
+}
+
 // ── Activation ──────────────────────────────────────────────────────────────
 
 function activate(context) {
@@ -738,8 +760,41 @@ function activate(context) {
 
     vscode.commands.registerCommand('motkra.reviewPR', () => {
       provider.inject('Review this PR diff for bugs, style issues, and improvements:\n```diff\n\n```');
+    }),
+
+    // ── Phase 11 — Daemon status command ──────────────────────────────
+    vscode.commands.registerCommand('motkra.daemonStatus', () => {
+      const cfg  = vscode.workspace.getConfiguration('motkra');
+      const port = cfg.get('daemonPort') ?? 7432;
+      checkDaemon(port, running => {
+        if (running) {
+          vscode.window.showInformationMessage(
+            `Motkra Daemon is running on port ${port}. System-wide chat available via Ctrl+Shift+Space.`,
+            'Open Chat'
+          ).then(sel => {
+            if (sel === 'Open Chat') vscode.env.openExternal(vscode.Uri.parse(`http://127.0.0.1:${port}/status`));
+          });
+        } else {
+          vscode.window.showInformationMessage(
+            'Motkra Daemon is not running. Start it with: cd motkra-daemon && npm start',
+            'Show Instructions'
+          ).then(sel => {
+            if (sel === 'Show Instructions')
+              vscode.window.showInformationMessage('Run: cd motkra-daemon && npm install && npm start');
+          });
+        }
+      });
     })
   );
+
+  // ── Phase 11 — Daemon connectivity check (silent) ──────────────────
+  const cfg  = vscode.workspace.getConfiguration('motkra');
+  const port = cfg.get('daemonPort') ?? 7432;
+  checkDaemon(port, running => {
+    if (running) {
+      provider._out().appendLine('[Motkra] Daemon connected on port ' + port);
+    }
+  });
 }
 
 function deactivate() {}

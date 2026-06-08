@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Motkra</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:        #1e1e1e;
+    --bg2:       #252526;
+    --bg3:       #2d2d2d;
+    --border:    #3c3c3c;
+    --fg:        #cccccc;
+    --fg-dim:    #888888;
+    --blue:      #007acc;
+    --blue-bg:   #0d3a58;
+    --blue-hi:   #9cdcfe;
+    --teal:      #00bc88;
+    --green-bg:  #1a3a1a;
+    --err:       #f48771;
+  }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 13px;
+    background: var(--bg);
+    color: var(--fg);
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    user-select: none;
+    -webkit-app-region: drag;
+  }
+
+  /* ── Title bar ── */
+  #titlebar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 7px 10px 6px;
+    background: var(--bg2);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+    -webkit-app-region: drag;
+  }
+  #titlebar-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  #titlebar-name {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--teal);
+  }
+  #model-badge {
+    font-size: 10px;
+    padding: 1px 6px;
+    border-radius: 8px;
+    background: var(--blue-bg);
+    color: var(--blue-hi);
+  }
+  #titlebar-right {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    -webkit-app-region: no-drag;
+  }
+  #vscode-btn, #close-btn {
+    background: none;
+    border: none;
+    color: var(--fg);
+    cursor: pointer;
+    font-size: 13px;
+    padding: 3px 7px;
+    border-radius: 3px;
+    opacity: 0.5;
+    line-height: 1;
+  }
+  #vscode-btn:hover { opacity: 1; background: #264f78; color: var(--blue-hi); }
+  #close-btn:hover  { opacity: 1; background: #5a1d1d; color: var(--err); }
+
+  /* ── Messages ── */
+  #messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    -webkit-app-region: no-drag;
+    user-select: text;
+  }
+  #messages::-webkit-scrollbar { width: 4px; }
+  #messages::-webkit-scrollbar-thumb { background: #555; border-radius: 2px; }
+
+  /* Placeholder */
+  #empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    flex: 1;
+    opacity: 0.4;
+    font-size: 12px;
+    text-align: center;
+  }
+  #empty-state .big { font-size: 28px; }
+
+  .msg { display: flex; flex-direction: column; gap: 3px; }
+  .msg .label {
+    font-size: 10px;
+    opacity: 0.45;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  .bubble {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px 10px;
+    line-height: 1.55;
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-size: 12px;
+  }
+  .msg.user      .bubble { background: var(--blue-bg);  border-color: #1a6fa0; }
+  .msg.assistant .bubble { background: var(--green-bg); border-color: #2a5a2a; }
+  .msg.error     .bubble { border-color: var(--err); color: var(--err); }
+
+  .bubble pre {
+    background: #141414;
+    border-radius: 4px;
+    padding: 8px;
+    overflow-x: auto;
+    margin: 4px 0;
+    font-family: 'Cascadia Code', 'Consolas', 'Menlo', monospace;
+    font-size: 11px;
+    white-space: pre;
+  }
+  .bubble code { font-family: 'Cascadia Code', 'Consolas', 'Menlo', monospace; font-size: 11px; }
+  .bubble strong { color: #fff; }
+
+  .cursor {
+    display: inline-block;
+    width: 2px;
+    height: 1em;
+    background: currentColor;
+    animation: blink .7s step-end infinite;
+    vertical-align: text-bottom;
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  /* ── No-API-key warning ── */
+  #no-key-banner {
+    display: none;
+    padding: 7px 10px;
+    background: #5a3a00;
+    color: #ffd580;
+    font-size: 11px;
+    text-align: center;
+    flex-shrink: 0;
+    border-top: 1px solid #7a5000;
+  }
+  #no-key-banner.visible { display: block; }
+
+  /* ── Input area ── */
+  #input-area {
+    border-top: 1px solid var(--border);
+    padding: 8px;
+    display: flex;
+    gap: 6px;
+    align-items: flex-end;
+    flex-shrink: 0;
+    background: var(--bg2);
+    -webkit-app-region: no-drag;
+  }
+  #input {
+    flex: 1;
+    min-height: 36px;
+    max-height: 120px;
+    resize: none;
+    background: var(--bg3);
+    color: var(--fg);
+    border: 1px solid #555;
+    border-radius: 4px;
+    padding: 7px 9px;
+    font-family: inherit;
+    font-size: 13px;
+    outline: none;
+    line-height: 1.4;
+    user-select: text;
+  }
+  #input:focus  { border-color: var(--blue); }
+  #input:disabled { opacity: 0.45; }
+
+  #send-btn {
+    background: var(--blue);
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    padding: 0 14px;
+    height: 36px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 600;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  #send-btn:hover    { background: #1177bb; }
+  #send-btn:disabled { opacity: 0.4; cursor: default; }
+
+  /* ── Clear button ── */
+  #clear-btn {
+    background: none;
+    border: none;
+    color: var(--fg-dim);
+    cursor: pointer;
+    font-size: 11px;
+    padding: 3px 6px;
+    border-radius: 3px;
+    align-self: flex-end;
+    height: 36px;
+    white-space: nowrap;
+  }
+  #clear-btn:hover { color: var(--fg); background: var(--bg3); }
+</style>
+</head>
+<body>
+
+<div id="titlebar">
+  <div id="titlebar-left">
+    <span id="titlebar-name">Motkra</span>
+    <span id="model-badge">☁ Claude</span>
+  </div>
+  <div id="titlebar-right">
+    <button id="vscode-btn" title="Open VS Code">⌨</button>
+    <button id="clear-btn" title="Clear conversation">↺ clear</button>
+    <button id="close-btn" title="Hide  (Ctrl+Shift+Space to reopen)">✕</button>
+  </div>
+</div>
+
+<div id="no-key-banner">
+  ⚠ ANTHROPIC_API_KEY not set — set it in <code>~/.motkra/.env</code>
+</div>
+
+<div id="messages">
+  <div id="empty-state">
+    <div class="big">🤖</div>
+    <div>Ask anything — Motkra is listening</div>
+    <div style="opacity:.6;font-size:11px">Ctrl+Shift+Space to toggle · Esc to hide</div>
+  </div>
+</div>
+
+<div id="input-area">
+  <textarea id="input" placeholder="Ask Motkra anything…" rows="1"></textarea>
+  <button id="send-btn">Send</button>
+</div>
+
+<script>
+const messagesEl = document.getElementById('messages');
+const inputEl    = document.getElementById('input');
+const sendBtn    = document.getElementById('send-btn');
+const closeBtn   = document.getElementById('close-btn');
+const vsCodeBtn  = document.getElementById('vscode-btn');
+const clearBtn   = document.getElementById('clear-btn');
+const emptyState = document.getElementById('empty-state');
+const noKeyBanner= document.getElementById('no-key-banner');
+
+let history   = [];
+let curBubble = null;
+let busy      = false;
+
+// ── Check API key ─────────────────────────────────────────────────────────
+window.motkra.getConfig().then(cfg => {
+  if (!cfg.hasApiKey) noKeyBanner.classList.add('visible');
+});
+
+// ── Register token stream handler once ───────────────────────────────────
+window.motkra.onToken(token => {
+  if (!curBubble) return;
+  curBubble._raw += token;
+  curBubble.innerHTML = renderMarkdown(curBubble._raw) + '<span class="cursor"></span>';
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+});
+
+// ── Helpers ───────────────────────────────────────────────────────────────
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function renderMarkdown(text) {
+  text = text.replace(/```(\w*)\n?([\s\S]*?)```/g,
+    (_, lang, code) => `<pre><code>${esc(code.trimEnd())}</code></pre>`);
+  text = text.replace(/`([^`]+)`/g, (_, c) => `<code>${esc(c)}</code>`);
+  text = text.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  text = text.replace(/\*(.+?)\*/g,     '<em>$1</em>');
+  return text;
+}
+
+function addBubble(role, label) {
+  if (emptyState.parentNode) emptyState.remove();
+  const wrapper = document.createElement('div');
+  wrapper.className = `msg ${role}`;
+  const lbl    = document.createElement('div');
+  lbl.className   = 'label';
+  lbl.textContent = label;
+  const bubble = document.createElement('div');
+  bubble.className = 'bubble';
+  wrapper.appendChild(lbl);
+  wrapper.appendChild(bubble);
+  messagesEl.appendChild(wrapper);
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+  return bubble;
+}
+
+// ── Send ──────────────────────────────────────────────────────────────────
+async function send() {
+  const text = inputEl.value.trim();
+  if (!text || busy) return;
+
+  busy = true;
+  sendBtn.disabled  = true;
+  inputEl.disabled  = true;
+
+  const ub = addBubble('user', 'You');
+  ub.innerHTML = renderMarkdown(text);
+  inputEl.value = '';
+  inputEl.style.height = 'auto';
+
+  history.push({ role: 'user', content: text });
+
+  curBubble      = addBubble('assistant', '☁ Claude');
+  curBubble._raw = '';
+  curBubble.innerHTML = '<span class="cursor"></span>';
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+
+  try {
+    await window.motkra.queryStream(text, history.slice(0, -1));
+
+    const full   = curBubble._raw;
+    curBubble.innerHTML = renderMarkdown(full);
+    curBubble._raw = '';
+    history.push({ role: 'assistant', content: full });
+    curBubble = null;
+  } catch (err) {
+    if (curBubble) { curBubble.parentNode?.remove(); curBubble = null; }
+    const eb = addBubble('error', 'Error');
+    eb.textContent = err.message ?? String(err);
+    history.pop(); // remove the user message that failed
+  }
+
+  busy = false;
+  sendBtn.disabled  = false;
+  inputEl.disabled  = false;
+  inputEl.focus();
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+}
+
+// ── Controls ──────────────────────────────────────────────────────────────
+closeBtn.addEventListener('click',  () => window.motkra.hideWindow());
+vsCodeBtn.addEventListener('click', () => window.motkra.openVSCode());
+
+clearBtn.addEventListener('click', () => {
+  history = [];
+  messagesEl.innerHTML = '';
+  messagesEl.appendChild(emptyState);
+});
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') window.motkra.hideWindow();
+});
+
+// ── Input handling ────────────────────────────────────────────────────────
+inputEl.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
+});
+sendBtn.addEventListener('click', send);
+
+inputEl.addEventListener('input', () => {
+  inputEl.style.height = 'auto';
+  inputEl.style.height = Math.min(inputEl.scrollHeight, 120) + 'px';
+});
+
+inputEl.focus();
+</script>
+</body>
+</html>
