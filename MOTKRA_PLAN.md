@@ -176,20 +176,20 @@ Target: 1,000 GitHub stars. Timeline: ~8 weeks.
 *Claude can search the web and see your screen.*
 
 ### 9A — Web Search Tool
-- [ ] **9A-1** Add `web_search` tool to agent registry
-- [ ] **9A-2** Implement using Brave Search API (free tier: 2,000 req/day) — `GET https://api.search.brave.com/res/v1/web/search?q=...`
-- [ ] **9A-3** Add `motkra.braveSearchKey` setting
-- [ ] **9A-4** Fallback to DuckDuckGo instant answer API if no key configured
+- [x] **9A-1** Add `web_search` tool to agent registry
+- [x] **9A-2** Implement in `core/web.js` using Brave Search API (`GET .../web/search?q=...&count=5`)
+- [x] **9A-3** Add `motkra.braveSearchKey` setting
+- [x] **9A-4** Fallback to DuckDuckGo instant-answer API when no key configured
 
 ### 9B — Web Fetch Tool
-- [ ] **9B-1** Add `fetch_url` tool — fetches URL content, strips HTML to markdown using `node-html-markdown`
-- [ ] **9B-2** Limit to 10,000 chars, truncate with a note
-- [ ] **9B-3** Cache fetched URLs in SQLite for 1 hour to avoid duplicate fetches
+- [x] **9B-1** Add `fetch_url` tool — `core/web.js` fetches URL, strips HTML with dependency-free regex stripper
+- [x] **9B-2** Limit to 10,000 chars with truncation note
+- [x] **9B-3** In-memory URL cache with 1-hour TTL (no SQLite dependency)
 
 ### 9C — Screenshot Tool
-- [ ] **9C-1** Add `take_screenshot` tool — calls `vscode.commands.executeCommand('workbench.action.screenshot')`
-- [ ] **9C-2** Read resulting PNG, encode as base64, pass to Claude Vision as image content block
-- [ ] **9C-3** Add `motkra.allowScreenshot` setting (default: `false`, explicit opt-in)
+- [x] **9C-1** Add `take_screenshot` tool — executes `workbench.action.screenshot`, scans OS temp dir for newest PNG within 1.5s
+- [x] **9C-2** Returns image content block `[{type:'image', source:{type:'base64',...}}]`; agentic loop passes array directly to Claude Vision
+- [x] **9C-3** Add `motkra.allowScreenshot` setting (default: `false`, explicit opt-in)
 
 ---
 

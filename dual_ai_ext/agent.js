@@ -7,8 +7,12 @@ const { exec } = require('child_process');
 let vscode;
 try { vscode = require('vscode'); } catch { vscode = null; }
 
+const os = require('os');
+
 const { default: Anthropic } = require('@anthropic-ai/sdk');
 const client = new Anthropic();
+
+const { searchWeb, fetchUrl } = require('./core/web');
 
 // ── Tools Claude can call ────────────────────────────────────────────────────
 
@@ -75,6 +79,43 @@ const TOOLS = [
         cwd: { type: 'string', description: 'Working directory (defaults to workspace root)' }
       },
       required: ['cmd']
+    }
+  },
+  {
+    name: 'web_search',
+    description:
+      'Search the web for information. Use for current events, library docs, error messages, ' +
+      'or anything not in the local codebase. Returns up to 5 results.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'Search query' }
+      },
+      required: ['query']
+    }
+  },
+  {
+    name: 'fetch_url',
+    description:
+      'Fetch the text content of a URL (HTML stripped). ' +
+      'Useful for reading documentation pages, GitHub issues, or any web resource. ' +
+      'Returns up to 10,000 characters.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        url: { type: 'string', description: 'Full URL including https://' }
+      },
+      required: ['url']
+    }
+  },
+  {
+    name: 'take_screenshot',
+    description:
+      'Capture a screenshot of the active VS Code editor and attach it as an image. ' +
+      'Requires motkra.allowScreenshot = true.',
+    input_schema: {
+      type: 'object',
+      properties: {}
     }
   }
 ];
@@ -174,6 +215,55 @@ async function executeTool(name, input, opts = {}) {
       });
     }
 
+    case 'web_search': {
+      const cfg      = vscode?.workspace?.getConfiguration('motkra');
+      const braveKey = cfg?.get('braveSearchKey') ?? '';
+      return await searchWeb(input.query, braveKey);
+    }
+
+    case 'fetch_url': {
+      return await fetchUrl(input.url);
+    }
+
+    case 'take_screenshot': {
+      const cfg = vscode?.workspace?.getConfiguration('motkra');
+      if (!cfg?.get('allowScreenshot', false)) {
+        return 'Screenshot is disabled. Set motkra.allowScreenshot = true in VS Code settings to enable.';
+      }
+      if (!vscode) return 'Screenshot requires the VS Code extension environment.';
+
+      const before = Date.now();
+      await vscode.commands.executeCommand('workbench.action.screenshot');
+
+      // Wait for the file to be written to disk
+      await new Promise(r => setTimeout(r, 1500));
+
+      // VS Code saves screenshots to the OS temp directory as vscode-screenshot-*.png
+      const tmpDir  = os.tmpdir();
+      let newest    = null;
+      let newestTs  = 0;
+      try {
+        for (const e of fs.readdirSync(tmpDir, { withFileTypes: true })) {
+          if (!e.isFile() || !e.name.match(/\.(png|jpg)$/i)) continue;
+          const full = path.join(tmpDir, e.name);
+          const stat = fs.statSync(full);
+          if (stat.mtimeMs > before && stat.mtimeMs > newestTs) {
+            newestTs = stat.mtimeMs;
+            newest   = full;
+          }
+        }
+      } catch { /* temp dir unreadable */ }
+
+      if (!newest) {
+        return 'Screenshot saved, but could not locate the file automatically. Try sharing the path manually.';
+      }
+
+      const data = fs.readFileSync(newest).toString('base64');
+      const mime = newest.endsWith('.png') ? 'image/png' : 'image/jpeg';
+      // Return image content block — handled by the agentic loop
+      return [{ type: 'image', source: { type: 'base64', media_type: mime, data } }];
+    }
+
     default:
       throw new Error(`Unknown tool: ${name}`);
   }
@@ -250,7 +340,9 @@ async function runAgent(history, system, onToken, onTool, onDone, onDiffRequest,
       } catch (err) {
         result = `Error: ${err.message}`;
       }
-      results.push({ type: 'tool_result', tool_use_id: block.id, content: String(result) });
+      // Array result means image/multi-part content (e.g. screenshot); string otherwise
+      const content = Array.isArray(result) ? result : String(result);
+      results.push({ type: 'tool_result', tool_use_id: block.id, content });
     }
     messages.push({ role: 'user', content: results });
   }

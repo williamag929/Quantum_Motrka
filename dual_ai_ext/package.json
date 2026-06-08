@@ -108,6 +108,16 @@
           "default": "gemma4:e2b",
           "description": "Default local Ollama model for completions and fast responses."
         },
+        "motkra.braveSearchKey": {
+          "type": "string",
+          "default": "",
+          "description": "Brave Search API key for the web_search tool. Free tier: 2,000 requests/day. Leave blank to use DuckDuckGo instant answers (limited)."
+        },
+        "motkra.allowScreenshot": {
+          "type": "boolean",
+          "default": false,
+          "description": "Allow the take_screenshot agent tool to capture the VS Code editor and pass the image to Claude Vision."
+        },
         "motkra.workspaceIndex": {
           "type": "boolean",
           "default": true,
