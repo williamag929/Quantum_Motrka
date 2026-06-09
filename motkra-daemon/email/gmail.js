@@ -41,20 +41,28 @@ function saveState(state) {
   fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));
 }
 
+// ── First-run setup hook ──────────────────────────────────────────────────────
+
+class CredentialsMissingError extends Error {
+  constructor() {
+    super(`Gmail credentials not found at ${CREDENTIALS_FILE}.`);
+    this.name = 'CredentialsMissingError';
+  }
+}
+
+let _onCredentialsNeeded = null;
+
+/** Called by main.js to inject a setup-window callback for first-run UX. */
+function setOnCredentialsNeeded(fn) { _onCredentialsNeeded = fn; }
+
 // ── OAuth2 ────────────────────────────────────────────────────────────────────
 
 function getOAuth2Client() {
   let google;
   try { google = require('googleapis').google; }
-  catch { throw new Error('googleapis not installed. Run: cd motkra-daemon && npm install googleapis'); }
+  catch { throw new Error('googleapis not installed. Run: cd motkra-daemon && npm install'); }
 
-  if (!fs.existsSync(CREDENTIALS_FILE)) {
-    throw new Error(
-      `Gmail credentials not found at ${CREDENTIALS_FILE}.\n` +
-      'Steps: Google Cloud Console → APIs & Services → Credentials →\n' +
-      'Create OAuth 2.0 Client ID (Desktop) → Download JSON → save to that path.'
-    );
-  }
+  if (!fs.existsSync(CREDENTIALS_FILE)) throw new CredentialsMissingError();
 
   const creds = JSON.parse(fs.readFileSync(CREDENTIALS_FILE, 'utf8'));
   const { client_id, client_secret } = creds.installed ?? creds.web ?? creds;
@@ -62,7 +70,14 @@ function getOAuth2Client() {
 }
 
 async function ensureAuth() {
-  const { google, oauth2 } = getOAuth2Client();
+  let google, oauth2;
+  try {
+    ({ google, oauth2 } = getOAuth2Client());
+  } catch (e) {
+    if (!(e instanceof CredentialsMissingError) || !_onCredentialsNeeded) throw e;
+    await _onCredentialsNeeded(); // opens setup window; resolves when credentials saved
+    return ensureAuth();          // retry — credentials file now exists
+  }
 
   if (fs.existsSync(TOKENS_FILE)) {
     const tokens = JSON.parse(fs.readFileSync(TOKENS_FILE, 'utf8'));
@@ -258,4 +273,4 @@ async function pollApprovalReply(approvalMsgId, timeoutMs = 300_000) {
   });
 }
 
-module.exports = { listNew, send, archive, getMyEmail, pollApprovalReply, ensureAuth };
+module.exports = { listNew, send, archive, getMyEmail, pollApprovalReply, ensureAuth, setOnCredentialsNeeded };

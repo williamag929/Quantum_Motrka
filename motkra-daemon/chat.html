@@ -20,6 +20,7 @@
     --teal:      #00bc88;
     --green-bg:  #1a3a1a;
     --err:       #f48771;
+    --red:       #e05252;
   }
 
   body {
@@ -46,11 +47,7 @@
     flex-shrink: 0;
     -webkit-app-region: drag;
   }
-  #titlebar-left {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
+  #titlebar-left { display: flex; align-items: center; gap: 8px; }
   #titlebar-name {
     font-size: 11px;
     font-weight: 700;
@@ -65,13 +62,24 @@
     background: var(--blue-bg);
     color: var(--blue-hi);
   }
+  /* Listening indicator in title bar */
+  #listen-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--red);
+    display: none;
+    animation: pulse-dot 1.2s ease-in-out infinite;
+  }
+  #listen-dot.active { display: inline-block; }
+  @keyframes pulse-dot { 0%,100% { opacity:1; transform:scale(1); } 50% { opacity:.4; transform:scale(.7); } }
+
   #titlebar-right {
     display: flex;
     align-items: center;
     gap: 4px;
     -webkit-app-region: no-drag;
   }
-  #vscode-btn, #close-btn {
+  #vscode-btn, #close-btn, #tts-btn, #clear-btn {
     background: none;
     border: none;
     color: var(--fg);
@@ -82,8 +90,12 @@
     opacity: 0.5;
     line-height: 1;
   }
-  #vscode-btn:hover { opacity: 1; background: #264f78; color: var(--blue-hi); }
-  #close-btn:hover  { opacity: 1; background: #5a1d1d; color: var(--err); }
+  #vscode-btn:hover  { opacity: 1; background: #264f78; color: var(--blue-hi); }
+  #close-btn:hover   { opacity: 1; background: #5a1d1d; color: var(--err); }
+  #tts-btn:hover     { opacity: 1; }
+  #tts-btn.active    { opacity: 1; color: var(--teal); }
+  #clear-btn:hover   { opacity: 1; background: var(--bg3); color: var(--fg); }
+  #clear-btn         { font-size: 11px; }
 
   /* ── Messages ── */
   #messages {
@@ -99,7 +111,6 @@
   #messages::-webkit-scrollbar { width: 4px; }
   #messages::-webkit-scrollbar-thumb { background: #555; border-radius: 2px; }
 
-  /* Placeholder */
   #empty-state {
     display: flex;
     flex-direction: column;
@@ -181,6 +192,29 @@
     background: var(--bg2);
     -webkit-app-region: no-drag;
   }
+
+  /* Mic button */
+  #mic-btn {
+    background: none;
+    border: none;
+    color: var(--fg-dim);
+    cursor: pointer;
+    font-size: 16px;
+    padding: 0 6px;
+    height: 36px;
+    border-radius: 4px;
+    flex-shrink: 0;
+    line-height: 1;
+    transition: color .15s, background .15s;
+  }
+  #mic-btn:hover { color: var(--fg); background: var(--bg3); }
+  #mic-btn.listening {
+    color: var(--red);
+    animation: mic-pulse 1.2s ease-in-out infinite;
+  }
+  @keyframes mic-pulse { 0%,100% { opacity:1; } 50% { opacity:.45; } }
+  #mic-btn.no-speech { display: none; }
+
   #input {
     flex: 1;
     min-height: 36px;
@@ -196,9 +230,11 @@
     outline: none;
     line-height: 1.4;
     user-select: text;
+    transition: border-color .15s;
   }
-  #input:focus  { border-color: var(--blue); }
+  #input:focus    { border-color: var(--blue); }
   #input:disabled { opacity: 0.45; }
+  #input.listening { border-color: var(--red); }
 
   #send-btn {
     background: var(--blue);
@@ -215,21 +251,6 @@
   }
   #send-btn:hover    { background: #1177bb; }
   #send-btn:disabled { opacity: 0.4; cursor: default; }
-
-  /* ── Clear button ── */
-  #clear-btn {
-    background: none;
-    border: none;
-    color: var(--fg-dim);
-    cursor: pointer;
-    font-size: 11px;
-    padding: 3px 6px;
-    border-radius: 3px;
-    align-self: flex-end;
-    height: 36px;
-    white-space: nowrap;
-  }
-  #clear-btn:hover { color: var(--fg); background: var(--bg3); }
 </style>
 </head>
 <body>
@@ -238,11 +259,13 @@
   <div id="titlebar-left">
     <span id="titlebar-name">Motkra</span>
     <span id="model-badge">☁ Claude</span>
+    <span id="listen-dot" title="Listening…"></span>
   </div>
   <div id="titlebar-right">
     <button id="vscode-btn" title="Open VS Code">⌨</button>
-    <button id="clear-btn" title="Clear conversation">↺ clear</button>
-    <button id="close-btn" title="Hide  (Ctrl+Shift+Space to reopen)">✕</button>
+    <button id="tts-btn"    title="Voice responses: OFF">🔊</button>
+    <button id="clear-btn"  title="Clear conversation">↺ clear</button>
+    <button id="close-btn"  title="Hide  (Ctrl+Shift+Space to reopen)">✕</button>
   </div>
 </div>
 
@@ -253,12 +276,13 @@
 <div id="messages">
   <div id="empty-state">
     <div class="big">🤖</div>
-    <div>Ask anything — Motkra is listening</div>
-    <div style="opacity:.6;font-size:11px">Ctrl+Shift+Space to toggle · Esc to hide</div>
+    <div>Speak or type — Motkra is listening</div>
+    <div style="opacity:.6;font-size:11px">Ctrl+Shift+Space to toggle  ·  🎙 to use your voice</div>
   </div>
 </div>
 
 <div id="input-area">
+  <button id="mic-btn" title="Start voice input">🎙</button>
   <textarea id="input" placeholder="Ask Motkra anything…" rows="1"></textarea>
   <button id="send-btn">Send</button>
 </div>
@@ -270,6 +294,9 @@ const sendBtn    = document.getElementById('send-btn');
 const closeBtn   = document.getElementById('close-btn');
 const vsCodeBtn  = document.getElementById('vscode-btn');
 const clearBtn   = document.getElementById('clear-btn');
+const micBtn     = document.getElementById('mic-btn');
+const ttsBtn     = document.getElementById('tts-btn');
+const listenDot  = document.getElementById('listen-dot');
 const emptyState = document.getElementById('empty-state');
 const noKeyBanner= document.getElementById('no-key-banner');
 
@@ -320,14 +347,156 @@ function addBubble(role, label) {
   return bubble;
 }
 
+// ── Voice: STT ────────────────────────────────────────────────────────────
+const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+let recognition  = null;
+let micActive    = false;
+let silenceTimer = null;
+
+if (SpeechRec) {
+  recognition = new SpeechRec();
+  recognition.continuous     = true;
+  recognition.interimResults = true;
+  recognition.lang           = navigator.language || 'en-US';
+
+  recognition.onresult = event => {
+    let interim = '';
+    let finalChunk = '';
+    for (let i = event.resultIndex; i < event.results.length; i++) {
+      const r = event.results[i];
+      if (r.isFinal) finalChunk += r[0].transcript;
+      else           interim    += r[0].transcript;
+    }
+
+    if (finalChunk) {
+      // Append confirmed text to the input
+      inputEl.value = (inputEl.value + ' ' + finalChunk).trim();
+      inputEl.placeholder = 'Listening…';
+      autoGrow();
+      clearTimeout(silenceTimer);
+      // Auto-submit after 1.5 s of silence
+      silenceTimer = setTimeout(() => {
+        if (!busy && inputEl.value.trim()) send();
+      }, 1500);
+    }
+
+    if (interim) {
+      // Show interim as placeholder (doesn't modify committed text)
+      inputEl.placeholder = interim;
+    }
+  };
+
+  recognition.onerror = e => {
+    if (e.error !== 'aborted' && e.error !== 'no-speech') {
+      console.warn('[voice] STT error:', e.error);
+    }
+    // Restart automatically on recoverable errors
+    if (micActive && e.error !== 'not-allowed') {
+      setTimeout(() => { try { recognition.start(); } catch {} }, 300);
+    } else if (e.error === 'not-allowed') {
+      stopMic();
+    }
+  };
+
+  // Keep alive: restart when it ends naturally while mic is still on
+  recognition.onend = () => {
+    if (micActive) { try { recognition.start(); } catch {} }
+  };
+} else {
+  micBtn.classList.add('no-speech');
+}
+
+function startMic() {
+  if (!recognition || micActive) return;
+  micActive = true;
+  micBtn.classList.add('listening');
+  micBtn.title = 'Stop listening  (click to mute)';
+  inputEl.classList.add('listening');
+  inputEl.placeholder = 'Listening…';
+  listenDot.classList.add('active');
+  try { recognition.start(); } catch {}
+}
+
+function stopMic() {
+  if (!recognition) return;
+  micActive = false;
+  clearTimeout(silenceTimer);
+  micBtn.classList.remove('listening');
+  micBtn.title = 'Start voice input';
+  inputEl.classList.remove('listening');
+  inputEl.placeholder = 'Ask Motkra anything…';
+  listenDot.classList.remove('active');
+  try { recognition.stop(); } catch {}
+}
+
+micBtn.addEventListener('click', () => {
+  if (micActive) stopMic(); else startMic();
+});
+
+// ── Voice: TTS ────────────────────────────────────────────────────────────
+let ttsEnabled = false;
+
+ttsBtn.addEventListener('click', () => {
+  ttsEnabled = !ttsEnabled;
+  ttsBtn.classList.toggle('active', ttsEnabled);
+  ttsBtn.title = ttsEnabled ? 'Voice responses: ON  (click to mute)' : 'Voice responses: OFF';
+  if (!ttsEnabled) window.speechSynthesis.cancel();
+});
+
+/**
+ * Speak a response — strips code fences, inline code, and markdown symbols.
+ * Silently skips if TTS is off or the text is code-heavy.
+ */
+function speak(text) {
+  if (!ttsEnabled || !window.speechSynthesis) return;
+  window.speechSynthesis.cancel();
+
+  const prose = text
+    .replace(/```[\s\S]*?```/g, '')          // remove code fences entirely
+    .replace(/`[^`\n]+`/g, '')               // remove inline code
+    .replace(/\*\*?(.+?)\*\*?/g, '$1')       // strip bold/italic markers
+    .replace(/#{1,6}\s+/g, '')               // strip headings
+    .replace(/^>\s+/gm, '')                  // strip blockquotes
+    .replace(/!\[.*?\]\(.*?\)/g, '')         // strip images
+    .replace(/\[(.+?)\]\(.*?\)/g, '$1')      // strip links (keep label)
+    .replace(/\n{2,}/g, '. ')
+    .replace(/\n/g, ' ')
+    .trim();
+
+  const words = prose.split(/\s+/).filter(Boolean);
+  if (words.length < 4) return;              // too short or all-code — skip
+  if (words.length > 200) {
+    // Cap to first 200 words so very long responses don't read forever
+    const snippet = words.slice(0, 200).join(' ') + '…';
+    _doSpeak(snippet);
+  } else {
+    _doSpeak(prose);
+  }
+}
+
+function _doSpeak(text) {
+  const utt   = new SpeechSynthesisUtterance(text);
+  utt.rate    = 1.05;
+  utt.pitch   = 0.95;
+  // Prefer a natural-sounding voice if available
+  const voices = window.speechSynthesis.getVoices();
+  const natural = voices.find(v =>
+    /natural|enhanced|premium/i.test(v.name) && v.lang.startsWith('en')
+  ) || voices.find(v => v.lang.startsWith('en') && !v.localService === false);
+  if (natural) utt.voice = natural;
+  window.speechSynthesis.speak(utt);
+}
+
 // ── Send ──────────────────────────────────────────────────────────────────
 async function send() {
   const text = inputEl.value.trim();
   if (!text || busy) return;
 
   busy = true;
-  sendBtn.disabled  = true;
-  inputEl.disabled  = true;
+  clearTimeout(silenceTimer);
+  sendBtn.disabled = true;
+  inputEl.disabled = true;
+  if (micActive) inputEl.placeholder = 'Listening…'; // keep placeholder for next turn
 
   const ub = addBubble('user', 'You');
   ub.innerHTML = renderMarkdown(text);
@@ -344,37 +513,54 @@ async function send() {
   try {
     await window.motkra.queryStream(text, history.slice(0, -1));
 
-    const full   = curBubble._raw;
+    const full = curBubble._raw;
     curBubble.innerHTML = renderMarkdown(full);
     curBubble._raw = '';
     history.push({ role: 'assistant', content: full });
     curBubble = null;
+
+    // Read response aloud if TTS is on
+    speak(full);
+
   } catch (err) {
     if (curBubble) { curBubble.parentNode?.remove(); curBubble = null; }
     const eb = addBubble('error', 'Error');
     eb.textContent = err.message ?? String(err);
-    history.pop(); // remove the user message that failed
+    history.pop();
   }
 
   busy = false;
-  sendBtn.disabled  = false;
-  inputEl.disabled  = false;
-  inputEl.focus();
+  sendBtn.disabled = false;
+  inputEl.disabled = false;
+
+  // If mic was active, stay in listening mode for the next turn
+  if (!micActive) inputEl.focus();
+
   messagesEl.scrollTop = messagesEl.scrollHeight;
 }
 
 // ── Controls ──────────────────────────────────────────────────────────────
-closeBtn.addEventListener('click',  () => window.motkra.hideWindow());
+closeBtn.addEventListener('click', () => {
+  stopMic();
+  window.speechSynthesis.cancel();
+  window.motkra.hideWindow();
+});
+
 vsCodeBtn.addEventListener('click', () => window.motkra.openVSCode());
 
 clearBtn.addEventListener('click', () => {
   history = [];
   messagesEl.innerHTML = '';
   messagesEl.appendChild(emptyState);
+  window.speechSynthesis.cancel();
 });
 
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') window.motkra.hideWindow();
+  if (e.key === 'Escape') {
+    stopMic();
+    window.speechSynthesis.cancel();
+    window.motkra.hideWindow();
+  }
 });
 
 // ── Input handling ────────────────────────────────────────────────────────
@@ -383,10 +569,15 @@ inputEl.addEventListener('keydown', e => {
 });
 sendBtn.addEventListener('click', send);
 
-inputEl.addEventListener('input', () => {
+function autoGrow() {
   inputEl.style.height = 'auto';
   inputEl.style.height = Math.min(inputEl.scrollHeight, 120) + 'px';
-});
+}
+inputEl.addEventListener('input', autoGrow);
+
+// Pre-load voices (Chrome initialises the list async)
+window.speechSynthesis?.getVoices();
+window.speechSynthesis?.addEventListener?.('voiceschanged', () => window.speechSynthesis.getVoices());
 
 inputEl.focus();
 </script>

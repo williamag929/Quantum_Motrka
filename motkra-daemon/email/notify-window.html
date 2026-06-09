@@ -122,7 +122,10 @@
 
 <div id="drag-bar">
   <span id="drag-title">📧 MOTKRA EMAIL</span>
-  <button id="close-btn" title="Dismiss">✕</button>
+  <div style="-webkit-app-region:no-drag;display:flex;gap:6px;align-items:center">
+    <button id="mute-btn"  title="Mute voice" style="background:none;border:none;color:#cdd6f4;opacity:.4;cursor:pointer;font-size:13px;padding:0 4px;line-height:1">🔊</button>
+    <button id="close-btn" title="Dismiss">✕</button>
+  </div>
 </div>
 
 <div id="email-header">
@@ -159,12 +162,36 @@ const { ipcRenderer } = require('electron');
 let _email  = null;
 let _result = null;
 
+// ── Voice announcement ────────────────────────────────────────────────────
+function announce(fromName, subject, trust, body) {
+  if (!window.speechSynthesis || !trust || trust < 3) return;
+  window.speechSynthesis.cancel();
+
+  let text;
+  if (trust >= 4) {
+    // Close contacts: say name, subject, and first sentence of body
+    const firstSentence = (body || '').replace(/\n/g, ' ').split(/[.!?]/)[0].trim();
+    text = `Message from ${fromName}. ${subject}.${firstSentence ? ' ' + firstSentence + '.' : ''}`;
+  } else {
+    // Trust 3: just name and subject (you'll still review before reply)
+    text = `${fromName} sent you a message: ${subject}.`;
+  }
+
+  const utt   = new SpeechSynthesisUtterance(text);
+  utt.rate    = 1.0;
+  utt.pitch   = 0.9;
+  const voices = window.speechSynthesis.getVoices();
+  const pick   = voices.find(v => /natural|enhanced|premium/i.test(v.name) && v.lang.startsWith('en'))
+               || voices.find(v => v.lang.startsWith('en'));
+  if (pick) utt.voice = pick;
+  window.speechSynthesis.speak(utt);
+}
+
 // Receive email data from main process
 ipcRenderer.on('email-notify', (_ev, { email, result }) => {
   _email  = email;
   _result = result;
 
-  const trustNum  = parseInt(document.getElementById('trust-badge').dataset.trust ?? '0', 10);
   const fromMatch = email.from.match(/^(.+?)\s*<(.+)>$/) ?? [null, email.from, email.from];
   const fromName  = fromMatch[1].replace(/^"|"$/g, '').trim();
   const fromAddr  = fromMatch[2];
@@ -183,15 +210,16 @@ ipcRenderer.on('email-notify', (_ev, { email, result }) => {
   document.getElementById('conf-val').textContent  = `${conf}/10`;
   document.getElementById('reason-text').textContent = result.reason ?? '';
 
-  // Colour-code confidence bar
   const fill = document.getElementById('conf-fill');
   fill.style.background = conf >= 7 ? '#a6e3a1' : conf >= 4 ? '#fab387' : '#f38ba8';
 
-  // For flag events, hide Send and show prominent Flag button
   if (result.action === 'flag') {
     document.getElementById('btn-send').style.display = 'none';
     document.getElementById('draft-section').style.display = 'none';
   }
+
+  // Speak the announcement (voices list may not be ready yet — small delay)
+  setTimeout(() => announce(fromName, email.subject, result.trust, email.body), 400);
 });
 
 document.getElementById('btn-send').addEventListener('click', () => {
@@ -210,7 +238,14 @@ document.getElementById('btn-flag').addEventListener('click', () => {
   window.close();
 });
 
+document.getElementById('mute-btn').addEventListener('click', () => {
+  window.speechSynthesis.cancel();
+  document.getElementById('mute-btn').textContent = '🔇';
+  document.getElementById('mute-btn').title = 'Voice muted';
+});
+
 document.getElementById('close-btn').addEventListener('click', () => {
+  window.speechSynthesis.cancel();
   ipcRenderer.send('email-action', { type: 'ignore', email: _email });
   window.close();
 });

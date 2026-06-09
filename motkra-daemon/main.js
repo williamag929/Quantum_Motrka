@@ -21,6 +21,7 @@ for (const loc of ENV_CANDIDATES) {
 const tray    = require('./tray');
 const ipc     = require('./ipc');
 const monitor = require('./email/monitor');
+const gmail   = require('./email/gmail');
 
 // ── Single instance lock ──────────────────────────────────────────────────
 
@@ -160,14 +161,74 @@ function createNotifyWindow(email, result) {
 ipcMain.on('email-action', async (_ev, { type, email, draft }) => {
   if (type === 'send' && email && draft) {
     try {
-      const { send } = require('./email/gmail');
-      await send(email.from, `Re: ${email.subject}`, draft, email.threadId);
+      await gmail.send(email.from, `Re: ${email.subject}`, draft, email.threadId);
       console.log('[email] sent from notification window to', email.from);
     } catch (e) {
       console.error('[email] send error:', e.message);
     }
   }
   // ignore / flag — no further action needed from this side
+});
+
+// ── Email first-run setup window (Phase 17) ──────────────────────────────────
+
+let setupWin             = null;
+let _pendingSetupResolve = null;
+let _pendingSetupReject  = null;
+
+function createSetupWindow() {
+  if (setupWin && !setupWin.isDestroyed()) { setupWin.focus(); return; }
+
+  setupWin = new BrowserWindow({
+    width:       480,
+    height:      520,
+    frame:       false,
+    alwaysOnTop: true,
+    resizable:   false,
+    show:        false,
+    webPreferences: {
+      nodeIntegration:  true,
+      contextIsolation: false,
+    },
+  });
+
+  setupWin.loadFile(path.join(__dirname, 'email', 'setup-window.html'));
+  setupWin.once('ready-to-show', () => { setupWin.center(); setupWin.show(); setupWin.focus(); });
+
+  setupWin.on('closed', () => {
+    setupWin = null;
+    if (_pendingSetupReject) {
+      _pendingSetupReject(new Error('Gmail setup cancelled'));
+      _pendingSetupResolve = null;
+      _pendingSetupReject  = null;
+    }
+  });
+}
+
+ipcMain.handle('email-setup-browse', async () => {
+  const { dialog } = require('electron');
+  const result = await dialog.showOpenDialog(setupWin ?? null, {
+    title:      'Select Gmail Credentials JSON',
+    filters:    [{ name: 'JSON files', extensions: ['json'] }],
+    properties: ['openFile'],
+  });
+  if (result.canceled || !result.filePaths.length) return null;
+  try { return fs.readFileSync(result.filePaths[0], 'utf8'); } catch { return null; }
+});
+
+ipcMain.on('email-setup-save', (_ev, { client_id, client_secret }) => {
+  const motkraDir = path.join(os.homedir(), '.motkra');
+  const credFile  = path.join(motkraDir, 'gmail-credentials.json');
+  const creds     = { installed: { client_id, client_secret, redirect_uris: ['http://localhost:3456/oauth2callback'] } };
+  fs.mkdirSync(motkraDir, { recursive: true });
+  fs.writeFileSync(credFile, JSON.stringify(creds, null, 2));
+  console.log('[email] Credentials saved to', credFile);
+  if (setupWin && !setupWin.isDestroyed()) setupWin.close();
+  if (_pendingSetupResolve) {
+    _pendingSetupResolve();
+    _pendingSetupResolve = null;
+    _pendingSetupReject  = null;
+  }
 });
 
 // ── App lifecycle ─────────────────────────────────────────────────────────
@@ -187,6 +248,13 @@ app.whenReady().then(() => {
     onQuit:        () => app.quit(),
     onEmailToggle: toggleEmailMonitor,
   });
+
+  // Wire first-run setup window for when gmail-credentials.json is missing
+  gmail.setOnCredentialsNeeded(() => new Promise((resolve, reject) => {
+    _pendingSetupResolve = resolve;
+    _pendingSetupReject  = reject;
+    createSetupWindow();
+  }));
 
   // ── Email monitor (Phase 17) — start if enabled ──────────────────────
   if (process.env.MOTKRA_EMAIL_ENABLED === '1') {
@@ -225,7 +293,11 @@ function startEmailMonitor() {
       createNotifyWindow(email, { ...result, trust });
     },
   }).catch(e => {
-    console.error('[email] monitor start error:', e.message);
+    if (e.message === 'Gmail setup cancelled') {
+      console.log('[email] Setup was cancelled — email agent not started.');
+    } else {
+      console.error('[email] monitor start error:', e.message);
+    }
     _emailRunning = false;
   });
 }
