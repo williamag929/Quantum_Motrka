@@ -251,6 +251,69 @@
   }
   #send-btn:hover    { background: #1177bb; }
   #send-btn:disabled { opacity: 0.4; cursor: default; }
+
+  /* ── Microphone permission modal ── */
+  #mic-modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,.55);
+    backdrop-filter: blur(2px);
+    z-index: 100;
+    align-items: center;
+    justify-content: center;
+    -webkit-app-region: no-drag;
+  }
+  #mic-modal-overlay.visible { display: flex; }
+
+  #mic-modal {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 28px 24px 20px;
+    width: 300px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    box-shadow: 0 8px 32px rgba(0,0,0,.5);
+  }
+  #mic-modal .modal-icon {
+    font-size: 36px;
+    line-height: 1;
+    margin-bottom: 4px;
+  }
+  #mic-modal h3 {
+    font-size: 14px;
+    font-weight: 700;
+    color: #fff;
+    text-align: center;
+  }
+  #mic-modal p {
+    font-size: 12px;
+    color: var(--fg-dim);
+    text-align: center;
+    line-height: 1.6;
+  }
+  #mic-modal .modal-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 6px;
+    width: 100%;
+  }
+  #mic-modal button {
+    flex: 1;
+    padding: 8px 0;
+    border: none;
+    border-radius: 5px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity .15s;
+  }
+  #mic-modal button:hover { opacity: .85; }
+  #mic-allow  { background: var(--teal);   color: #111; }
+  #mic-deny   { background: var(--bg3);    color: var(--fg); border: 1px solid var(--border); }
 </style>
 </head>
 <body>
@@ -281,6 +344,19 @@
   </div>
 </div>
 
+<!-- Microphone permission modal (shown once on first mic click) -->
+<div id="mic-modal-overlay">
+  <div id="mic-modal">
+    <div class="modal-icon">🎙</div>
+    <h3>Allow microphone access?</h3>
+    <p>Voice input lets you speak to Motkra instead of typing. Your audio is processed on-device and never stored.</p>
+    <div class="modal-actions">
+      <button id="mic-allow">Allow</button>
+      <button id="mic-deny">Not now</button>
+    </div>
+  </div>
+</div>
+
 <div id="input-area">
   <button id="mic-btn" title="Start voice input">🎙</button>
   <textarea id="input" placeholder="Ask Motkra anything…" rows="1"></textarea>
@@ -300,14 +376,32 @@ const listenDot  = document.getElementById('listen-dot');
 const emptyState = document.getElementById('empty-state');
 const noKeyBanner= document.getElementById('no-key-banner');
 
-let history   = [];
-let curBubble = null;
-let busy      = false;
+let history      = [];
+let curBubble    = null;
+let busy         = false;
+let _modelForce  = 'auto'; // 'auto' | 'claude' | 'gemma'
+
+const modelBadge = document.getElementById('model-badge');
 
 // ── Check API key ─────────────────────────────────────────────────────────
 window.motkra.getConfig().then(cfg => {
   if (!cfg.hasApiKey) noKeyBanner.classList.add('visible');
 });
+
+// ── Model badge ───────────────────────────────────────────────────────────
+function setBadge(model) {
+  if (model === 'gemma') {
+    modelBadge.textContent = '🏠 Gemma';
+    modelBadge.style.background = '#1a3a1a';
+    modelBadge.style.color      = '#89d185';
+  } else {
+    modelBadge.textContent = '☁ Claude';
+    modelBadge.style.background = '';
+    modelBadge.style.color      = '';
+  }
+}
+
+window.motkra.onModelSelected(model => setBadge(model));
 
 // ── Register token stream handler once ───────────────────────────────────
 window.motkra.onToken(token => {
@@ -347,78 +441,35 @@ function addBubble(role, label) {
   return bubble;
 }
 
-// ── Voice: STT ────────────────────────────────────────────────────────────
-const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
-let recognition  = null;
+// ── Voice: STT (local — Windows System.Speech via main process) ──────────
+// No network calls. Audio never leaves the machine.
 let micActive    = false;
 let silenceTimer = null;
 
-if (SpeechRec) {
-  recognition = new SpeechRec();
-  recognition.continuous     = true;
-  recognition.interimResults = true;
-  recognition.lang           = navigator.language || 'en-US';
-
-  recognition.onresult = event => {
-    let interim = '';
-    let finalChunk = '';
-    for (let i = event.resultIndex; i < event.results.length; i++) {
-      const r = event.results[i];
-      if (r.isFinal) finalChunk += r[0].transcript;
-      else           interim    += r[0].transcript;
-    }
-
-    if (finalChunk) {
-      // Append confirmed text to the input
-      inputEl.value = (inputEl.value + ' ' + finalChunk).trim();
-      inputEl.placeholder = 'Listening…';
-      autoGrow();
-      clearTimeout(silenceTimer);
-      // Auto-submit after 1.5 s of silence
-      silenceTimer = setTimeout(() => {
-        if (!busy && inputEl.value.trim()) send();
-      }, 1500);
-    }
-
-    if (interim) {
-      // Show interim as placeholder (doesn't modify committed text)
-      inputEl.placeholder = interim;
-    }
-  };
-
-  recognition.onerror = e => {
-    if (e.error !== 'aborted' && e.error !== 'no-speech') {
-      console.warn('[voice] STT error:', e.error);
-    }
-    // Restart automatically on recoverable errors
-    if (micActive && e.error !== 'not-allowed') {
-      setTimeout(() => { try { recognition.start(); } catch {} }, 300);
-    } else if (e.error === 'not-allowed') {
-      stopMic();
-    }
-  };
-
-  // Keep alive: restart when it ends naturally while mic is still on
-  recognition.onend = () => {
-    if (micActive) { try { recognition.start(); } catch {} }
-  };
-} else {
-  micBtn.classList.add('no-speech');
-}
+// Each transcript line arrives from the PowerShell STT process via IPC
+window.motkra.onTranscript(text => {
+  if (!micActive) return;
+  inputEl.value = (inputEl.value + ' ' + text).trim();
+  inputEl.placeholder = 'Listening…';
+  autoGrow();
+  clearTimeout(silenceTimer);
+  silenceTimer = setTimeout(() => {
+    if (!busy && inputEl.value.trim()) send();
+  }, 1500);
+});
 
 function startMic() {
-  if (!recognition || micActive) return;
+  if (micActive) return;
   micActive = true;
   micBtn.classList.add('listening');
   micBtn.title = 'Stop listening  (click to mute)';
   inputEl.classList.add('listening');
   inputEl.placeholder = 'Listening…';
   listenDot.classList.add('active');
-  try { recognition.start(); } catch {}
+  window.motkra.sttStart();
 }
 
 function stopMic() {
-  if (!recognition) return;
   micActive = false;
   clearTimeout(silenceTimer);
   micBtn.classList.remove('listening');
@@ -426,11 +477,42 @@ function stopMic() {
   inputEl.classList.remove('listening');
   inputEl.placeholder = 'Ask Motkra anything…';
   listenDot.classList.remove('active');
-  try { recognition.stop(); } catch {}
+  window.motkra.sttStop();
 }
 
+// ── Microphone permission gate ────────────────────────────────────────────
+const micOverlay  = document.getElementById('mic-modal-overlay');
+const micAllowBtn = document.getElementById('mic-allow');
+const micDenyBtn  = document.getElementById('mic-deny');
+
+function requestMicAndStart() {
+  // Already granted this session → start immediately
+  if (localStorage.getItem('motkra-mic-allowed') === '1') {
+    startMic();
+    return;
+  }
+  // Show the permission modal
+  micOverlay.classList.add('visible');
+}
+
+micAllowBtn.addEventListener('click', () => {
+  localStorage.setItem('motkra-mic-allowed', '1');
+  micOverlay.classList.remove('visible');
+  startMic();
+});
+
+micDenyBtn.addEventListener('click', () => {
+  micOverlay.classList.remove('visible');
+  // No localStorage write on "Not now" — will prompt again next time
+});
+
+// Close modal if user clicks the backdrop
+micOverlay.addEventListener('click', e => {
+  if (e.target === micOverlay) micOverlay.classList.remove('visible');
+});
+
 micBtn.addEventListener('click', () => {
-  if (micActive) stopMic(); else startMic();
+  if (micActive) stopMic(); else requestMicAndStart();
 });
 
 // ── Voice: TTS ────────────────────────────────────────────────────────────
@@ -492,6 +574,34 @@ async function send() {
   const text = inputEl.value.trim();
   if (!text || busy) return;
 
+  // ── Slash commands ──────────────────────────────────────────────────────
+  if (text === '/local') {
+    _modelForce = 'gemma';
+    setBadge('gemma');
+    inputEl.value = '';
+    const b = addBubble('assistant', 'Motkra');
+    b.textContent = '🏠 Switched to Gemma (local) — all messages go to Ollama until you type /auto or /cloud.';
+    return;
+  }
+  if (text === '/cloud') {
+    _modelForce = 'claude';
+    setBadge('claude');
+    inputEl.value = '';
+    const b = addBubble('assistant', 'Motkra');
+    b.textContent = '☁ Switched to Claude — all messages go to the cloud until you type /auto or /local.';
+    return;
+  }
+  if (text === '/auto') {
+    _modelForce = 'auto';
+    modelBadge.textContent = '⚡ Auto';
+    modelBadge.style.background = '';
+    modelBadge.style.color      = '';
+    inputEl.value = '';
+    const b = addBubble('assistant', 'Motkra');
+    b.textContent = '⚡ Auto-routing on — short/simple questions go to Gemma, complex ones to Claude.';
+    return;
+  }
+
   busy = true;
   clearTimeout(silenceTimer);
   sendBtn.disabled = true;
@@ -505,13 +615,13 @@ async function send() {
 
   history.push({ role: 'user', content: text });
 
-  curBubble      = addBubble('assistant', '☁ Claude');
+  curBubble      = addBubble('assistant', modelBadge.textContent);
   curBubble._raw = '';
   curBubble.innerHTML = '<span class="cursor"></span>';
   messagesEl.scrollTop = messagesEl.scrollHeight;
 
   try {
-    await window.motkra.queryStream(text, history.slice(0, -1));
+    await window.motkra.queryStream(text, history.slice(0, -1), _modelForce);
 
     const full = curBubble._raw;
     curBubble.innerHTML = renderMarkdown(full);

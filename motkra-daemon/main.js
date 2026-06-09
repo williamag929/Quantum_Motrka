@@ -1,7 +1,7 @@
 'use strict';
 
 const {
-  app, BrowserWindow, globalShortcut, ipcMain, shell
+  app, BrowserWindow, globalShortcut, ipcMain, shell, session
 } = require('electron');
 const path = require('path');
 const fs   = require('fs');
@@ -91,17 +91,68 @@ function positionNearCursor() {
 function toggleChatWindow() {
   if (chatWin && !chatWin.isDestroyed() && chatWin.isVisible()) {
     chatWin.hide();
+    stopSTT(); // mic off when window hides
   } else {
     createChatWindow();
   }
 }
 
+// ── Local STT (Windows System.Speech via PowerShell) ─────────────────────
+
+const { spawn } = require('child_process');
+let _sttProc = null;
+let _sttTarget = null; // BrowserWindow that receives transcript events
+
+function startSTT(targetWin) {
+  if (_sttProc) return; // already running
+  _sttTarget = targetWin;
+  const script = path.join(__dirname, 'voice', 'stt-win.ps1');
+  _sttProc = spawn('powershell.exe', [
+    '-NonInteractive', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', script,
+  ], { stdio: ['ignore', 'pipe', 'pipe'] });
+
+  let buf = '';
+  _sttProc.stdout.on('data', data => {
+    buf += data.toString();
+    const lines = buf.split('\n');
+    buf = lines.pop(); // keep incomplete last line
+    for (const line of lines) {
+      const text = line.trim();
+      if (text && _sttTarget && !_sttTarget.isDestroyed()) {
+        _sttTarget.webContents.send('stt-transcript', text);
+      }
+    }
+  });
+
+  _sttProc.stderr.on('data', d => console.warn('[stt]', d.toString().trim()));
+  _sttProc.on('exit', code => {
+    console.log(`[stt] process exited (${code})`);
+    _sttProc   = null;
+    _sttTarget = null;
+  });
+}
+
+function stopSTT() {
+  if (_sttProc) { try { _sttProc.kill(); } catch {} _sttProc = null; }
+  _sttTarget = null;
+}
+
 // ── IPC from renderer ─────────────────────────────────────────────────────
 
-ipcMain.handle('query-stream', async (event, { text, history }) => {
-  return ipc.handleQueryStream(text, history, token => {
-    if (!event.sender.isDestroyed()) event.sender.send('token', token);
-  });
+ipcMain.handle('stt-start', event => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  startSTT(win);
+});
+
+ipcMain.handle('stt-stop', () => stopSTT());
+
+ipcMain.handle('query-stream', async (event, { text, history, model = 'auto' }) => {
+  return ipc.handleQueryStream(
+    text, history,
+    token   => { if (!event.sender.isDestroyed()) event.sender.send('token', token); },
+    model,
+    chosen  => { if (!event.sender.isDestroyed()) event.sender.send('model-selected', chosen); }
+  );
 });
 
 ipcMain.on('hide-window', () => {
@@ -234,6 +285,18 @@ ipcMain.on('email-setup-save', (_ev, { client_id, client_secret }) => {
 // ── App lifecycle ─────────────────────────────────────────────────────────
 
 app.whenReady().then(() => {
+  // Grant microphone access for the Web Speech API.
+  // Electron's STT uses the 'audioCapture' permission (not 'media'), so both
+  // must be allowed. setPermissionCheckHandler covers cached/pre-check lookups;
+  // setPermissionRequestHandler covers live prompt requests.
+  const MIC_PERMS = ['media', 'audioCapture'];
+  session.defaultSession.setPermissionCheckHandler((_wc, permission) =>
+    MIC_PERMS.includes(permission)
+  );
+  session.defaultSession.setPermissionRequestHandler((_wc, permission, cb) =>
+    cb(MIC_PERMS.includes(permission))
+  );
+
   // Tray-only app: hide dock on macOS
   if (process.platform === 'darwin') app.dock?.hide();
 
@@ -314,6 +377,7 @@ function toggleEmailMonitor() {
 app.on('will-quit', () => {
   globalShortcut.unregisterAll();
   ipc.stopServer();
+  stopSTT();
   if (_emailRunning) monitor.stop();
 });
 
