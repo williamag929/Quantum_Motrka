@@ -54,3 +54,16 @@ CLOUD_HINTS = {
     "design", "debug", "comprehensive", "detailed", "step by step",
     "how does", "why does", "write code", "create", "refactor",
 }
+
+# Desktop daemon (daemon.py): localhost API port (the Electron motkra-daemon owns 7432 and
+# calls this one), and the global push-to-talk hotkey (press to start talking, press again to send).
+DAEMON_PORT = int(os.getenv("DAEMON_PORT", "7433"))
+DAEMON_HOTKEY = os.getenv("DAEMON_HOTKEY", "ctrl+shift+space")
+
+# Local voice. STT model: tiny | base | small | medium (bigger = more accurate, slower on CPU).
+# VOICE_LANGUAGE: ISO code such as "es" or "en"; empty means auto-detect.
+# PIPER_VOICE: path to a Piper .onnx voice; empty falls back to the built-in Windows voice.
+VOICE_STT_MODEL = os.getenv("VOICE_STT_MODEL", "small")
+VOICE_LANGUAGE = os.getenv("VOICE_LANGUAGE", "").strip().lower()
+PIPER_VOICE = os.getenv("PIPER_VOICE", "").strip()
+VOICE_REPLY = os.getenv("VOICE_REPLY", "on").lower() not in ("off", "0", "false")
