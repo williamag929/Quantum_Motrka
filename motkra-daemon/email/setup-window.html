@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Motkra — Gmail Setup</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: #1e1e2e;
+  color: #cdd6f4;
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 13px;
+  user-select: none;
+  border: 1px solid #45475a;
+  border-radius: 8px;
+  overflow: hidden;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.titlebar {
+  -webkit-app-region: drag;
+  background: #181825;
+  padding: 8px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid #313244;
+  flex-shrink: 0;
+}
+.titlebar .title { font-size: 12px; color: #a6adc8; font-weight: 500; }
+.close-btn {
+  -webkit-app-region: no-drag;
+  background: #f38ba8;
+  border: none;
+  border-radius: 50%;
+  width: 12px;
+  height: 12px;
+  cursor: pointer;
+  opacity: 0.8;
+}
+.close-btn:hover { opacity: 1; }
+
+.content {
+  padding: 20px;
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.heading { display: flex; align-items: center; gap: 10px; }
+.heading .icon { font-size: 26px; }
+.heading h2 { font-size: 14px; color: #cdd6f4; font-weight: 600; }
+.heading p { font-size: 12px; color: #6c7086; margin-top: 2px; }
+
+.section {
+  background: #181825;
+  border: 1px solid #313244;
+  border-radius: 6px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.section-title {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: #a6adc8;
+}
+.hint { font-size: 12px; color: #6c7086; line-height: 1.5; }
+
+a.console-link {
+  color: #89b4fa;
+  cursor: pointer;
+  text-decoration: underline;
+}
+a.console-link:hover { color: #b4befe; }
+
+.browse-row { display: flex; align-items: center; gap: 8px; }
+.browse-path {
+  flex: 1;
+  background: #1e1e2e;
+  border: 1px solid #45475a;
+  border-radius: 4px;
+  padding: 6px 10px;
+  color: #6c7086;
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.browse-path.ok { color: #a6e3a1; border-color: #a6e3a1; }
+
+.divider {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #45475a;
+  font-size: 11px;
+  flex-shrink: 0;
+}
+.divider::before, .divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: #313244;
+}
+
+.field { display: flex; flex-direction: column; gap: 4px; }
+.field label { font-size: 11px; color: #a6adc8; font-weight: 500; }
+.field input {
+  -webkit-app-region: no-drag;
+  background: #1e1e2e;
+  border: 1px solid #45475a;
+  border-radius: 4px;
+  padding: 7px 10px;
+  color: #cdd6f4;
+  font-size: 12px;
+  font-family: 'Consolas', 'Menlo', monospace;
+  outline: none;
+  transition: border-color 0.15s;
+  user-select: text;
+}
+.field input:focus { border-color: #89b4fa; }
+.field input::placeholder { color: #45475a; }
+
+.status {
+  font-size: 12px;
+  padding: 8px 10px;
+  border-radius: 4px;
+  display: none;
+  flex-shrink: 0;
+}
+.status.error { background: #3b1f23; border: 1px solid #f38ba8; color: #f38ba8; display: block; }
+.status.info  { background: #1e2d3b; border: 1px solid #89b4fa; color: #89b4fa; display: block; }
+
+.btn {
+  -webkit-app-region: no-drag;
+  padding: 7px 14px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  transition: opacity 0.15s;
+}
+.btn:hover:not(:disabled) { opacity: 0.85; }
+.btn:active:not(:disabled) { opacity: 0.7; }
+.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn-secondary { background: #313244; color: #cdd6f4; }
+.btn-primary {
+  background: #89b4fa;
+  color: #1e1e2e;
+  width: 100%;
+  padding: 10px;
+  font-size: 13px;
+  flex-shrink: 0;
+}
+</style>
+</head>
+<body>
+
+<div class="titlebar">
+  <span class="title">Motkra — Gmail Setup</span>
+  <button class="close-btn" onclick="window.close()" title="Cancel setup"></button>
+</div>
+
+<div class="content">
+
+  <div class="heading">
+    <span class="icon">📧</span>
+    <div>
+      <h2>Connect your Gmail account</h2>
+      <p>Motkra needs Google OAuth2 credentials to monitor your inbox.</p>
+    </div>
+  </div>
+
+  <!-- Option A: file picker -->
+  <div class="section">
+    <div class="section-title">Option A — Load credentials JSON</div>
+    <p class="hint">
+      In <a class="console-link" onclick="openConsole()">Google Cloud Console</a> go to
+      <strong style="color:#a6adc8">APIs &amp; Services → Credentials → Create OAuth 2.0 Client ID</strong>
+      (type: Desktop app), download the JSON, then click Browse below.
+    </p>
+    <div class="browse-row">
+      <div class="browse-path" id="browsePath">No file selected</div>
+      <button class="btn btn-secondary" onclick="browseFile()">Browse…</button>
+    </div>
+  </div>
+
+  <div class="divider">or enter manually</div>
+
+  <!-- Option B: manual entry -->
+  <div class="section">
+    <div class="section-title">Option B — Paste credentials</div>
+    <div class="field">
+      <label>Client ID</label>
+      <input type="text" id="clientId" placeholder="xxxxxxxxx.apps.googleusercontent.com" oninput="onInput()">
+    </div>
+    <div class="field">
+      <label>Client Secret</label>
+      <input type="text" id="clientSecret" placeholder="GOCSPX-…" oninput="onInput()">
+    </div>
+  </div>
+
+  <div class="status" id="status"></div>
+
+  <button class="btn btn-primary" id="saveBtn" onclick="save()" disabled>
+    Save &amp; Authorize Gmail →
+  </button>
+
+</div>
+
+<script>
+const { ipcRenderer, shell } = require('electron');
+
+function openConsole() {
+  shell.openExternal('https://console.cloud.google.com/apis/credentials');
+}
+
+async function browseFile() {
+  const json = await ipcRenderer.invoke('email-setup-browse');
+  if (!json) return;
+  try {
+    const creds = JSON.parse(json);
+    const { client_id, client_secret } = creds.installed ?? creds.web ?? creds;
+    if (!client_id || !client_secret) throw new Error('Missing client_id or client_secret in file.');
+    document.getElementById('clientId').value = client_id;
+    document.getElementById('clientSecret').value = client_secret;
+    document.getElementById('browsePath').textContent = client_id.substring(0, 20) + '…  ✓';
+    document.getElementById('browsePath').classList.add('ok');
+    showStatus('Credentials loaded from file.', 'info');
+    onInput();
+  } catch (e) {
+    showStatus('Could not read file: ' + e.message, 'error');
+  }
+}
+
+function onInput() {
+  const id  = document.getElementById('clientId').value.trim();
+  const sec = document.getElementById('clientSecret').value.trim();
+  document.getElementById('saveBtn').disabled = !(id && sec);
+}
+
+function showStatus(msg, type) {
+  const el = document.getElementById('status');
+  el.textContent = msg;
+  el.className = 'status ' + type;
+}
+
+function save() {
+  const client_id     = document.getElementById('clientId').value.trim();
+  const client_secret = document.getElementById('clientSecret').value.trim();
+  if (!client_id || !client_secret) {
+    showStatus('Both Client ID and Client Secret are required.', 'error');
+    return;
+  }
+  document.getElementById('saveBtn').disabled = true;
+  showStatus('Saving credentials — your browser will open for Gmail authorization…', 'info');
+  ipcRenderer.send('email-setup-save', { client_id, client_secret });
+}
+</script>
+
+</body>
+</html>

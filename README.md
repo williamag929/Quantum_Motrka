@@ -80,21 +80,21 @@ Quantum/
 ## Architecture
 
 ```
-motkra-browser  ──┐
-                  │  HTTP :7432           ┌──► Anthropic API  (Claude)
-dual_ai_ext    ──►  motkra-daemon ────────┤
-                  │                       └──► Ollama :11434  (Gemma 4)
+motkra-browser  ──┐                            ┌──► Anthropic API    (Claude)
+                  │  HTTP :7432                │
+dual_ai_ext    ──►  motkra-daemon ────────────┤
+                  │                            └──► Ollama :11434    (Gemma 4)
                   │  stdio / TCP :3333
 motkra-mcp     ◄──┘  ◄── Claude Desktop / any MCP client
 
-dual_ai (CLI)  ──────────────────────────────► Anthropic API / Ollama (direct)
+dual_ai (CLI)  ─────────────────────────────► Anthropic API / Ollama / NVIDIA API (direct)
 
 motkra-daemon  ──► Gmail API (OAuth2)   Email agent: read → triage → reply
 ```
 
-All components share one API key stored in `dual_ai/.env`. The daemon exposes a local HTTP API so the browser and VS Code extensions never need the key directly.
+All components share API keys stored in `dual_ai/.env`. The daemon exposes a local HTTP API so the browser and VS Code extensions never need the keys directly.
 
-**Auto-routing logic** (shared across all components): keyword scoring sends complex/creative prompts to Claude and short/local prompts to Gemma 4. Tie-break: ≤ 8 words → local.
+**Routing.** The CLI uses the privacy-aware router v3 described below. The other components still use the original keyword scoring (complex prompts → Claude, short ones → Gemma 4; tie-break ≤ 8 words → local). Kimi is available only in the CLI, selected with `/kimi` or `--kimi`.
 
 ---
 
@@ -102,20 +102,48 @@ All components share one API key stored in `dual_ai/.env`. The daemon exposes a 
 
 ### `dual_ai/` — Python CLI
 
-Interactive REPL with streaming responses and in-session commands.
+Interactive REPL with streaming responses, privacy-aware routing and usage stats.
 
 ```powershell
 cd dual_ai
 pip install -r requirements.txt
-copy .env.example .env        # add your ANTHROPIC_API_KEY
-python main.py                # auto-routing
+copy .env.example .env        # add ANTHROPIC_API_KEY and NVIDIA_API_KEY; DEFAULT_MODE picks the default
+python main.py                # DEFAULT_MODE from .env (auto unless changed)
 python main.py --local        # force Gemma 4
 python main.py --cloud        # force Claude
+python main.py --kimi         # force Kimi (NVIDIA)
+python -m pytest              # unit tests
+python bench/run.py           # routing benchmark
 ```
 
-In-session commands: `/local` `/cloud` `/auto` `/clear` `/history` `/quit`
+In-session commands: `/auto` `/local` `/cloud` `/kimi` `/stats` `/clear` `/history` `/quit`
 
-Requires Ollama running locally (`ollama serve`) with `gemma4:e2b` pulled.
+How auto mode decides (no model call, no added latency):
+
+1. **Secrets are redacted.** Passwords, API keys, tokens, connection-string passwords and card numbers become placeholders such as `[PASSWORD_1]` or `[CARD_1 ending 1111]` before anything leaves the machine, in every mode including `/cloud`. Answers are restored locally, even while streaming.
+2. **Personal topics stay local.** Health, money, HR, legal and family requests (English and Spanish) are answered by the local model with a prompt tuned for them. Once a conversation has a private turn it stays local; `/cloud` is one command away if you prefer Claude's answer.
+3. **Intent decides the rest.** Classifying, translating, summarizing, short replies and quick facts run locally; writing or explaining code, calculations and design go to Claude.
+4. **The local model skips its hidden reasoning** on one-line questions and label-only requests (same quality, ~5× faster on CPU).
+
+`/stats` shows the local share, private requests kept local, redactions, Claude spend and estimated savings (persisted in `~/.motkra/cli_stats.json`).
+
+Requires:
+- **Ollama** running locally (`ollama serve`) with the model in `GEMMA_MODEL` pulled (default `gemma4:e2b`)
+- **ANTHROPIC_API_KEY** in `.env` for Claude
+- **NVIDIA_API_KEY** in `.env` for Kimi (optional; the free tier is slow)
+
+#### Benchmark results (CPU-only desktop, holdout set)
+
+| | Claude only | Motkra router |
+|---|---:|---:|
+| Requests kept on the machine | 0% | 45% |
+| Private requests sent to the cloud in clear | 5 of 5 | 0 of 5 |
+| Average quality (1–10, blind) | 8.83 | 8.03 |
+| Average quality on non-private requests | 8.83 | 8.38 |
+| Claude bill | 100% | 80% |
+| Average latency | 12.3 s | 19.7 s |
+
+The router sits close to the oracle ceiling (8.21 quality at 48% local), so on this hardware the local model, not the routing, is the limit. The local requests are the short ones, which is why 45% of requests save only 20% of the bill. One rule was fixed after the holdout was scored ("código de estado HTTP" no longer counts as a coding request); before that fix the holdout read 41% local, 8.10 quality, 18% savings. Full report, including a failed experiment (a local-model triage router: slower and no better than the rules), in [`dual_ai/bench/reports/`](dual_ai/bench/reports/).
 
 ---
 

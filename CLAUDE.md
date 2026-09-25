@@ -23,22 +23,30 @@ The extension (`dual_ai_ext`) and CLI (`dual_ai`) share one `.env` file located 
 
 ```powershell
 cd dual_ai
-pip install -r requirements.txt       # anthropic, ollama, python-dotenv
+pip install -r requirements.txt       # anthropic, ollama, python-dotenv, requests
 copy .env.example .env                # then edit .env with your key
 python main.py                        # auto-routing mode
 python main.py --local                # force Gemma 4
 python main.py --cloud                # force Claude
+python main.py --kimi                 # force Kimi (NVIDIA)
+python -m pytest                      # unit tests
+python bench/run.py                   # routing benchmark
 ```
 
 Requires Ollama running locally (`ollama serve`) with `gemma4:e2b` pulled.
 
 ### Architecture
 
-- `config.py` — single source of truth for model IDs (`CLAUDE_MODEL`, `GEMMA_MODEL`) and routing keyword sets (`LOCAL_HINTS`, `CLOUD_HINTS`)
-- `router.py` — scores LOCAL_HINTS vs CLOUD_HINTS in the user message; tie-break on word count ≤ 8 → local
-- `claude_client.py` — Anthropic SDK streaming with adaptive thinking, `output_config.effort`, and system-prompt-level cache_control
-- `gemma_client.py` — `ollama.chat()` streaming; injects system prompt as a leading system message
-- `main.py` — REPL loop; in-session commands `/local`, `/cloud`, `/auto`, `/clear`, `/quit`
+Local-first: the local model answers what it can; Claude (or Kimi) gets the rest. Secrets never leave in clear and personal requests stay local.
+
+- `config.py` — loads `dual_ai/.env` itself; model IDs (`CLAUDE_MODEL`, `GEMMA_MODEL`, `KIMI_MODEL`), `DEFAULT_MODE`, `LOCAL_THINK` (`auto`/`on`/`off`), Claude prices, and the system prompts (`SYSTEM_PROMPT` for cloud, `LOCAL_SYSTEM_PROMPT` concise for the local model, `PERSONAL_SYSTEM_PROMPT` for personal requests kept local)
+- `privacy.py` — `scan()` detects secrets; `redact()`/`restore()` swap them for placeholders like `[PASSWORD_1]` with one session-wide mapping; `StreamRestorer` restores placeholders in streamed output; `REDACTION_NOTE` tells cloud models what placeholders mean
+- `router.py` — `smart_route()` (v3): redact → `looks_personal()` bilingual lexicon keeps personal topics local → `intent_route()` bilingual intent rules. No model call. `quick_answer()` decides when the local model can skip its hidden reasoning. `route()` (keyword v1) and `triage()` (Gemma triage v2) remain for benchmark comparison
+- `claude_client.py` / `gemma_client.py` / `kimi_client.py` — each exposes `generate(messages, system, on_text) -> Reply(text, input_tokens, output_tokens)` and `ask()` for streaming to stdout. Gemma resolves `think` per message via `should_think()`; Kimi is raw `requests` SSE against NVIDIA's OpenAI-compatible endpoint
+- `stats.py` — per-session and all-time counters in `~/.motkra/cli_stats.json` (local share, private kept local, redactions, Claude spend, estimated savings)
+- `main.py` — REPL. Cloud payloads are always redacted and exclude private turns; once a conversation has a private turn, auto mode keeps it local. Commands `/auto /local /cloud /kimi /stats /clear /history /quit`
+- `bench/` — routing benchmark (see `bench/README.md`): `python bench/run.py`, report in `bench/reports/<machine>.md`. Results are cached per machine in `bench/results/<machine>/`; cloud answers are shared in `bench/results/cloud_answers.jsonl`
+- Tests: `cd dual_ai && python -m pytest` (pure-function tests for privacy and routing)
 
 ---
 
@@ -91,7 +99,7 @@ System prompt text here.
 
 ## Claude SDK conventions (both sub-projects)
 
-- Model: `claude-opus-4-7`
+- Model: `claude-opus-4-7` (JS extension) / `CLAUDE_MODEL` from `.env`, default `claude-opus-5-5` (Python CLI)
 - Thinking: `{type: "adaptive"}` — no `budget_tokens`
 - Effort: `output_config: {effort: "xhigh"}` (JS agent) / `{"effort": "high"}` (Python CLI)
 - Cache: `cache_control: {type: "ephemeral"}` placed on the system prompt content block, not at top level

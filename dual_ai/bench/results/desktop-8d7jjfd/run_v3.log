@@ -1,0 +1,35 @@
+Answers to collect: 9 local (gemma4:e2b, thinking auto), 0 claude-opus-5-5, 6 claude-opus-5-5+redacted-0ae8e1, 0 moonshotai/kimi-k3
+  ✓ claude-opus-5-5+redacted-0ae8e1 pv08      3.8s  323 tok
+  ✓ claude-opus-5-5+redacted-0ae8e1 pv02      6.9s  659 tok
+  ✓ claude-opus-5-5+redacted-0ae8e1 h_pv1     8.5s  797 tok
+  ✓ claude-opus-5-5+redacted-0ae8e1 pv06      9.6s  891 tok
+  ✓ claude-opus-5-5+redacted-0ae8e1 pv01     11.7s  1114 tok
+  ✓ claude-opus-5-5+redacted-0ae8e1 h_pv4    17.6s  1964 tok
+  ✓ gemma4:e2b+0ead0d              pv03     71.7s  978 tok
+  ✓ gemma4:e2b+0ead0d              pv04     39.3s  561 tok
+  ✓ gemma4:e2b+0ead0d              pv05     57.7s  842 tok
+  ✓ gemma4:e2b+0ead0d              pv07     26.6s  373 tok
+  ✓ gemma4:e2b+0ead0d              pv09     56.1s  812 tok
+  ✓ gemma4:e2b+0ead0d              pv10     34.6s  503 tok
+  ✓ gemma4:e2b+0ead0d              h_pv2    43.5s  628 tok
+  ✓ gemma4:e2b+0ead0d              h_pv3    29.6s  431 tok
+  ✓ gemma4:e2b+0ead0d              h_pv5    73.6s  1098 tok
+Triage decisions to collect: 0 (prompt 29ec04)
+Judgments to collect: 15
+  ⚖ pv04   gemma4:e2b+0ead0d  4  vs claude-opus-5-5  9
+  ⚖ pv02   gemma4:e2b+931177  3  vs claude-opus-5-5+redacted-0ae8e1  9
+  ⚖ pv06   gemma4:e2b+931177  3  vs claude-opus-5-5+redacted-0ae8e1  9
+  ⚖ pv03   gemma4:e2b+0ead0d  6  vs claude-opus-5-5  9
+  ⚖ pv01   gemma4:e2b+931177  4  vs claude-opus-5-5+redacted-0ae8e1  8
+  ⚖ pv08   gemma4:e2b+931177  6  vs claude-opus-5-5+redacted-0ae8e1  4
+  ⚖ pv07   gemma4:e2b+0ead0d  6  vs claude-opus-5-5  7
+  ⚖ pv05   gemma4:e2b+0ead0d  6  vs claude-opus-5-5  8
+  ⚖ pv10   gemma4:e2b+0ead0d  5  vs claude-opus-5-5  7
+  ⚖ pv09   gemma4:e2b+0ead0d  5  vs claude-opus-5-5  9
+  ⚖ h_pv1  gemma4:e2b+931177  2  vs claude-opus-5-5+redacted-0ae8e1  8
+  ⚖ h_pv3  gemma4:e2b+0ead0d  5  vs claude-opus-5-5  9
+  ⚖ h_pv2  gemma4:e2b+0ead0d  5  vs claude-opus-5-5  9
+  ⚖ h_pv4  gemma4:e2b+931177  4  vs claude-opus-5-5+redacted-0ae8e1  9
+  ⚖ h_pv5  gemma4:e2b+0ead0d  4  vs claude-opus-5-5  9
+
+Report: D:\Projects\Python\Quantum\dual_ai\bench\reports\desktop-8d7jjfd.md

@@ -20,6 +20,7 @@
     --teal:      #00bc88;
     --green-bg:  #1a3a1a;
     --err:       #f48771;
+    --red:       #e05252;
   }
 
   body {
@@ -46,11 +47,7 @@
     flex-shrink: 0;
     -webkit-app-region: drag;
   }
-  #titlebar-left {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
+  #titlebar-left { display: flex; align-items: center; gap: 8px; }
   #titlebar-name {
     font-size: 11px;
     font-weight: 700;
@@ -65,13 +62,24 @@
     background: var(--blue-bg);
     color: var(--blue-hi);
   }
+  /* Listening indicator in title bar */
+  #listen-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--red);
+    display: none;
+    animation: pulse-dot 1.2s ease-in-out infinite;
+  }
+  #listen-dot.active { display: inline-block; }
+  @keyframes pulse-dot { 0%,100% { opacity:1; transform:scale(1); } 50% { opacity:.4; transform:scale(.7); } }
+
   #titlebar-right {
     display: flex;
     align-items: center;
     gap: 4px;
     -webkit-app-region: no-drag;
   }
-  #vscode-btn, #close-btn {
+  #vscode-btn, #close-btn, #tts-btn, #clear-btn {
     background: none;
     border: none;
     color: var(--fg);
@@ -82,8 +90,12 @@
     opacity: 0.5;
     line-height: 1;
   }
-  #vscode-btn:hover { opacity: 1; background: #264f78; color: var(--blue-hi); }
-  #close-btn:hover  { opacity: 1; background: #5a1d1d; color: var(--err); }
+  #vscode-btn:hover  { opacity: 1; background: #264f78; color: var(--blue-hi); }
+  #close-btn:hover   { opacity: 1; background: #5a1d1d; color: var(--err); }
+  #tts-btn:hover     { opacity: 1; }
+  #tts-btn.active    { opacity: 1; color: var(--teal); }
+  #clear-btn:hover   { opacity: 1; background: var(--bg3); color: var(--fg); }
+  #clear-btn         { font-size: 11px; }
 
   /* ── Messages ── */
   #messages {
@@ -99,7 +111,6 @@
   #messages::-webkit-scrollbar { width: 4px; }
   #messages::-webkit-scrollbar-thumb { background: #555; border-radius: 2px; }
 
-  /* Placeholder */
   #empty-state {
     display: flex;
     flex-direction: column;
@@ -181,6 +192,29 @@
     background: var(--bg2);
     -webkit-app-region: no-drag;
   }
+
+  /* Mic button */
+  #mic-btn {
+    background: none;
+    border: none;
+    color: var(--fg-dim);
+    cursor: pointer;
+    font-size: 16px;
+    padding: 0 6px;
+    height: 36px;
+    border-radius: 4px;
+    flex-shrink: 0;
+    line-height: 1;
+    transition: color .15s, background .15s;
+  }
+  #mic-btn:hover { color: var(--fg); background: var(--bg3); }
+  #mic-btn.listening {
+    color: var(--red);
+    animation: mic-pulse 1.2s ease-in-out infinite;
+  }
+  @keyframes mic-pulse { 0%,100% { opacity:1; } 50% { opacity:.45; } }
+  #mic-btn.no-speech { display: none; }
+
   #input {
     flex: 1;
     min-height: 36px;
@@ -196,9 +230,11 @@
     outline: none;
     line-height: 1.4;
     user-select: text;
+    transition: border-color .15s;
   }
-  #input:focus  { border-color: var(--blue); }
+  #input:focus    { border-color: var(--blue); }
   #input:disabled { opacity: 0.45; }
+  #input.listening { border-color: var(--red); }
 
   #send-btn {
     background: var(--blue);
@@ -216,20 +252,68 @@
   #send-btn:hover    { background: #1177bb; }
   #send-btn:disabled { opacity: 0.4; cursor: default; }
 
-  /* ── Clear button ── */
-  #clear-btn {
-    background: none;
-    border: none;
-    color: var(--fg-dim);
-    cursor: pointer;
-    font-size: 11px;
-    padding: 3px 6px;
-    border-radius: 3px;
-    align-self: flex-end;
-    height: 36px;
-    white-space: nowrap;
+  /* ── Microphone permission modal ── */
+  #mic-modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,.55);
+    backdrop-filter: blur(2px);
+    z-index: 100;
+    align-items: center;
+    justify-content: center;
+    -webkit-app-region: no-drag;
   }
-  #clear-btn:hover { color: var(--fg); background: var(--bg3); }
+  #mic-modal-overlay.visible { display: flex; }
+
+  #mic-modal {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 28px 24px 20px;
+    width: 300px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    box-shadow: 0 8px 32px rgba(0,0,0,.5);
+  }
+  #mic-modal .modal-icon {
+    font-size: 36px;
+    line-height: 1;
+    margin-bottom: 4px;
+  }
+  #mic-modal h3 {
+    font-size: 14px;
+    font-weight: 700;
+    color: #fff;
+    text-align: center;
+  }
+  #mic-modal p {
+    font-size: 12px;
+    color: var(--fg-dim);
+    text-align: center;
+    line-height: 1.6;
+  }
+  #mic-modal .modal-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 6px;
+    width: 100%;
+  }
+  #mic-modal button {
+    flex: 1;
+    padding: 8px 0;
+    border: none;
+    border-radius: 5px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity .15s;
+  }
+  #mic-modal button:hover { opacity: .85; }
+  #mic-allow  { background: var(--teal);   color: #111; }
+  #mic-deny   { background: var(--bg3);    color: var(--fg); border: 1px solid var(--border); }
 </style>
 </head>
 <body>
@@ -238,11 +322,13 @@
   <div id="titlebar-left">
     <span id="titlebar-name">Motkra</span>
     <span id="model-badge">☁ Claude</span>
+    <span id="listen-dot" title="Listening…"></span>
   </div>
   <div id="titlebar-right">
     <button id="vscode-btn" title="Open VS Code">⌨</button>
-    <button id="clear-btn" title="Clear conversation">↺ clear</button>
-    <button id="close-btn" title="Hide  (Ctrl+Shift+Space to reopen)">✕</button>
+    <button id="tts-btn"    title="Voice responses: OFF">🔊</button>
+    <button id="clear-btn"  title="Clear conversation">↺ clear</button>
+    <button id="close-btn"  title="Hide  (Ctrl+Shift+Space to reopen)">✕</button>
   </div>
 </div>
 
@@ -253,12 +339,26 @@
 <div id="messages">
   <div id="empty-state">
     <div class="big">🤖</div>
-    <div>Ask anything — Motkra is listening</div>
-    <div style="opacity:.6;font-size:11px">Ctrl+Shift+Space to toggle · Esc to hide</div>
+    <div>Speak or type — Motkra is listening</div>
+    <div style="opacity:.6;font-size:11px">Ctrl+Shift+Space to toggle  ·  🎙 to use your voice</div>
+  </div>
+</div>
+
+<!-- Microphone permission modal (shown once on first mic click) -->
+<div id="mic-modal-overlay">
+  <div id="mic-modal">
+    <div class="modal-icon">🎙</div>
+    <h3>Allow microphone access?</h3>
+    <p>Voice input lets you speak to Motkra instead of typing. Your audio is processed on-device and never stored.</p>
+    <div class="modal-actions">
+      <button id="mic-allow">Allow</button>
+      <button id="mic-deny">Not now</button>
+    </div>
   </div>
 </div>
 
 <div id="input-area">
+  <button id="mic-btn" title="Start voice input">🎙</button>
   <textarea id="input" placeholder="Ask Motkra anything…" rows="1"></textarea>
   <button id="send-btn">Send</button>
 </div>
@@ -270,17 +370,38 @@ const sendBtn    = document.getElementById('send-btn');
 const closeBtn   = document.getElementById('close-btn');
 const vsCodeBtn  = document.getElementById('vscode-btn');
 const clearBtn   = document.getElementById('clear-btn');
+const micBtn     = document.getElementById('mic-btn');
+const ttsBtn     = document.getElementById('tts-btn');
+const listenDot  = document.getElementById('listen-dot');
 const emptyState = document.getElementById('empty-state');
 const noKeyBanner= document.getElementById('no-key-banner');
 
-let history   = [];
-let curBubble = null;
-let busy      = false;
+let history      = [];
+let curBubble    = null;
+let busy         = false;
+let _modelForce  = 'auto'; // 'auto' | 'claude' | 'gemma'
+
+const modelBadge = document.getElementById('model-badge');
 
 // ── Check API key ─────────────────────────────────────────────────────────
 window.motkra.getConfig().then(cfg => {
   if (!cfg.hasApiKey) noKeyBanner.classList.add('visible');
 });
+
+// ── Model badge ───────────────────────────────────────────────────────────
+function setBadge(model) {
+  if (model === 'gemma') {
+    modelBadge.textContent = '🏠 Gemma';
+    modelBadge.style.background = '#1a3a1a';
+    modelBadge.style.color      = '#89d185';
+  } else {
+    modelBadge.textContent = '☁ Claude';
+    modelBadge.style.background = '';
+    modelBadge.style.color      = '';
+  }
+}
+
+window.motkra.onModelSelected(model => setBadge(model));
 
 // ── Register token stream handler once ───────────────────────────────────
 window.motkra.onToken(token => {
@@ -320,14 +441,172 @@ function addBubble(role, label) {
   return bubble;
 }
 
+// ── Voice: STT (local — Windows System.Speech via main process) ──────────
+// No network calls. Audio never leaves the machine.
+let micActive    = false;
+let silenceTimer = null;
+
+// Each transcript line arrives from the PowerShell STT process via IPC
+window.motkra.onTranscript(text => {
+  if (!micActive) return;
+  inputEl.value = (inputEl.value + ' ' + text).trim();
+  inputEl.placeholder = 'Listening…';
+  autoGrow();
+  clearTimeout(silenceTimer);
+  silenceTimer = setTimeout(() => {
+    if (!busy && inputEl.value.trim()) send();
+  }, 1500);
+});
+
+function startMic() {
+  if (micActive) return;
+  micActive = true;
+  micBtn.classList.add('listening');
+  micBtn.title = 'Stop listening  (click to mute)';
+  inputEl.classList.add('listening');
+  inputEl.placeholder = 'Listening…';
+  listenDot.classList.add('active');
+  window.motkra.sttStart();
+}
+
+function stopMic() {
+  micActive = false;
+  clearTimeout(silenceTimer);
+  micBtn.classList.remove('listening');
+  micBtn.title = 'Start voice input';
+  inputEl.classList.remove('listening');
+  inputEl.placeholder = 'Ask Motkra anything…';
+  listenDot.classList.remove('active');
+  window.motkra.sttStop();
+}
+
+// ── Microphone permission gate ────────────────────────────────────────────
+const micOverlay  = document.getElementById('mic-modal-overlay');
+const micAllowBtn = document.getElementById('mic-allow');
+const micDenyBtn  = document.getElementById('mic-deny');
+
+function requestMicAndStart() {
+  // Already granted this session → start immediately
+  if (localStorage.getItem('motkra-mic-allowed') === '1') {
+    startMic();
+    return;
+  }
+  // Show the permission modal
+  micOverlay.classList.add('visible');
+}
+
+micAllowBtn.addEventListener('click', () => {
+  localStorage.setItem('motkra-mic-allowed', '1');
+  micOverlay.classList.remove('visible');
+  startMic();
+});
+
+micDenyBtn.addEventListener('click', () => {
+  micOverlay.classList.remove('visible');
+  // No localStorage write on "Not now" — will prompt again next time
+});
+
+// Close modal if user clicks the backdrop
+micOverlay.addEventListener('click', e => {
+  if (e.target === micOverlay) micOverlay.classList.remove('visible');
+});
+
+micBtn.addEventListener('click', () => {
+  if (micActive) stopMic(); else requestMicAndStart();
+});
+
+// ── Voice: TTS ────────────────────────────────────────────────────────────
+let ttsEnabled = false;
+
+ttsBtn.addEventListener('click', () => {
+  ttsEnabled = !ttsEnabled;
+  ttsBtn.classList.toggle('active', ttsEnabled);
+  ttsBtn.title = ttsEnabled ? 'Voice responses: ON  (click to mute)' : 'Voice responses: OFF';
+  if (!ttsEnabled) window.speechSynthesis.cancel();
+});
+
+/**
+ * Speak a response — strips code fences, inline code, and markdown symbols.
+ * Silently skips if TTS is off or the text is code-heavy.
+ */
+function speak(text) {
+  if (!ttsEnabled || !window.speechSynthesis) return;
+  window.speechSynthesis.cancel();
+
+  const prose = text
+    .replace(/```[\s\S]*?```/g, '')          // remove code fences entirely
+    .replace(/`[^`\n]+`/g, '')               // remove inline code
+    .replace(/\*\*?(.+?)\*\*?/g, '$1')       // strip bold/italic markers
+    .replace(/#{1,6}\s+/g, '')               // strip headings
+    .replace(/^>\s+/gm, '')                  // strip blockquotes
+    .replace(/!\[.*?\]\(.*?\)/g, '')         // strip images
+    .replace(/\[(.+?)\]\(.*?\)/g, '$1')      // strip links (keep label)
+    .replace(/\n{2,}/g, '. ')
+    .replace(/\n/g, ' ')
+    .trim();
+
+  const words = prose.split(/\s+/).filter(Boolean);
+  if (words.length < 4) return;              // too short or all-code — skip
+  if (words.length > 200) {
+    // Cap to first 200 words so very long responses don't read forever
+    const snippet = words.slice(0, 200).join(' ') + '…';
+    _doSpeak(snippet);
+  } else {
+    _doSpeak(prose);
+  }
+}
+
+function _doSpeak(text) {
+  const utt   = new SpeechSynthesisUtterance(text);
+  utt.rate    = 1.05;
+  utt.pitch   = 0.95;
+  // Prefer a natural-sounding voice if available
+  const voices = window.speechSynthesis.getVoices();
+  const natural = voices.find(v =>
+    /natural|enhanced|premium/i.test(v.name) && v.lang.startsWith('en')
+  ) || voices.find(v => v.lang.startsWith('en') && !v.localService === false);
+  if (natural) utt.voice = natural;
+  window.speechSynthesis.speak(utt);
+}
+
 // ── Send ──────────────────────────────────────────────────────────────────
 async function send() {
   const text = inputEl.value.trim();
   if (!text || busy) return;
 
+  // ── Slash commands ──────────────────────────────────────────────────────
+  if (text === '/local') {
+    _modelForce = 'gemma';
+    setBadge('gemma');
+    inputEl.value = '';
+    const b = addBubble('assistant', 'Motkra');
+    b.textContent = '🏠 Switched to Gemma (local) — all messages go to Ollama until you type /auto or /cloud.';
+    return;
+  }
+  if (text === '/cloud') {
+    _modelForce = 'claude';
+    setBadge('claude');
+    inputEl.value = '';
+    const b = addBubble('assistant', 'Motkra');
+    b.textContent = '☁ Switched to Claude — all messages go to the cloud until you type /auto or /local.';
+    return;
+  }
+  if (text === '/auto') {
+    _modelForce = 'auto';
+    modelBadge.textContent = '⚡ Auto';
+    modelBadge.style.background = '';
+    modelBadge.style.color      = '';
+    inputEl.value = '';
+    const b = addBubble('assistant', 'Motkra');
+    b.textContent = '⚡ Auto-routing on — short/simple questions go to Gemma, complex ones to Claude.';
+    return;
+  }
+
   busy = true;
-  sendBtn.disabled  = true;
-  inputEl.disabled  = true;
+  clearTimeout(silenceTimer);
+  sendBtn.disabled = true;
+  inputEl.disabled = true;
+  if (micActive) inputEl.placeholder = 'Listening…'; // keep placeholder for next turn
 
   const ub = addBubble('user', 'You');
   ub.innerHTML = renderMarkdown(text);
@@ -336,45 +615,62 @@ async function send() {
 
   history.push({ role: 'user', content: text });
 
-  curBubble      = addBubble('assistant', '☁ Claude');
+  curBubble      = addBubble('assistant', modelBadge.textContent);
   curBubble._raw = '';
   curBubble.innerHTML = '<span class="cursor"></span>';
   messagesEl.scrollTop = messagesEl.scrollHeight;
 
   try {
-    await window.motkra.queryStream(text, history.slice(0, -1));
+    await window.motkra.queryStream(text, history.slice(0, -1), _modelForce);
 
-    const full   = curBubble._raw;
+    const full = curBubble._raw;
     curBubble.innerHTML = renderMarkdown(full);
     curBubble._raw = '';
     history.push({ role: 'assistant', content: full });
     curBubble = null;
+
+    // Read response aloud if TTS is on
+    speak(full);
+
   } catch (err) {
     if (curBubble) { curBubble.parentNode?.remove(); curBubble = null; }
     const eb = addBubble('error', 'Error');
     eb.textContent = err.message ?? String(err);
-    history.pop(); // remove the user message that failed
+    history.pop();
   }
 
   busy = false;
-  sendBtn.disabled  = false;
-  inputEl.disabled  = false;
-  inputEl.focus();
+  sendBtn.disabled = false;
+  inputEl.disabled = false;
+
+  // If mic was active, stay in listening mode for the next turn
+  if (!micActive) inputEl.focus();
+
   messagesEl.scrollTop = messagesEl.scrollHeight;
 }
 
 // ── Controls ──────────────────────────────────────────────────────────────
-closeBtn.addEventListener('click',  () => window.motkra.hideWindow());
+closeBtn.addEventListener('click', () => {
+  stopMic();
+  window.speechSynthesis.cancel();
+  window.motkra.hideWindow();
+});
+
 vsCodeBtn.addEventListener('click', () => window.motkra.openVSCode());
 
 clearBtn.addEventListener('click', () => {
   history = [];
   messagesEl.innerHTML = '';
   messagesEl.appendChild(emptyState);
+  window.speechSynthesis.cancel();
 });
 
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') window.motkra.hideWindow();
+  if (e.key === 'Escape') {
+    stopMic();
+    window.speechSynthesis.cancel();
+    window.motkra.hideWindow();
+  }
 });
 
 // ── Input handling ────────────────────────────────────────────────────────
@@ -383,10 +679,15 @@ inputEl.addEventListener('keydown', e => {
 });
 sendBtn.addEventListener('click', send);
 
-inputEl.addEventListener('input', () => {
+function autoGrow() {
   inputEl.style.height = 'auto';
   inputEl.style.height = Math.min(inputEl.scrollHeight, 120) + 'px';
-});
+}
+inputEl.addEventListener('input', autoGrow);
+
+// Pre-load voices (Chrome initialises the list async)
+window.speechSynthesis?.getVoices();
+window.speechSynthesis?.addEventListener?.('voiceschanged', () => window.speechSynthesis.getVoices());
 
 inputEl.focus();
 </script>

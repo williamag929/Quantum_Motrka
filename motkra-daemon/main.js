@@ -1,7 +1,7 @@
 'use strict';
 
 const {
-  app, BrowserWindow, globalShortcut, ipcMain, shell
+  app, BrowserWindow, globalShortcut, ipcMain, shell, session
 } = require('electron');
 const path = require('path');
 const fs   = require('fs');
@@ -21,6 +21,7 @@ for (const loc of ENV_CANDIDATES) {
 const tray    = require('./tray');
 const ipc     = require('./ipc');
 const monitor = require('./email/monitor');
+const gmail   = require('./email/gmail');
 
 // ── Single instance lock ──────────────────────────────────────────────────
 
@@ -90,17 +91,68 @@ function positionNearCursor() {
 function toggleChatWindow() {
   if (chatWin && !chatWin.isDestroyed() && chatWin.isVisible()) {
     chatWin.hide();
+    stopSTT(); // mic off when window hides
   } else {
     createChatWindow();
   }
 }
 
+// ── Local STT (Windows System.Speech via PowerShell) ─────────────────────
+
+const { spawn } = require('child_process');
+let _sttProc = null;
+let _sttTarget = null; // BrowserWindow that receives transcript events
+
+function startSTT(targetWin) {
+  if (_sttProc) return; // already running
+  _sttTarget = targetWin;
+  const script = path.join(__dirname, 'voice', 'stt-win.ps1');
+  _sttProc = spawn('powershell.exe', [
+    '-NonInteractive', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', script,
+  ], { stdio: ['ignore', 'pipe', 'pipe'] });
+
+  let buf = '';
+  _sttProc.stdout.on('data', data => {
+    buf += data.toString();
+    const lines = buf.split('\n');
+    buf = lines.pop(); // keep incomplete last line
+    for (const line of lines) {
+      const text = line.trim();
+      if (text && _sttTarget && !_sttTarget.isDestroyed()) {
+        _sttTarget.webContents.send('stt-transcript', text);
+      }
+    }
+  });
+
+  _sttProc.stderr.on('data', d => console.warn('[stt]', d.toString().trim()));
+  _sttProc.on('exit', code => {
+    console.log(`[stt] process exited (${code})`);
+    _sttProc   = null;
+    _sttTarget = null;
+  });
+}
+
+function stopSTT() {
+  if (_sttProc) { try { _sttProc.kill(); } catch {} _sttProc = null; }
+  _sttTarget = null;
+}
+
 // ── IPC from renderer ─────────────────────────────────────────────────────
 
-ipcMain.handle('query-stream', async (event, { text, history }) => {
-  return ipc.handleQueryStream(text, history, token => {
-    if (!event.sender.isDestroyed()) event.sender.send('token', token);
-  });
+ipcMain.handle('stt-start', event => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  startSTT(win);
+});
+
+ipcMain.handle('stt-stop', () => stopSTT());
+
+ipcMain.handle('query-stream', async (event, { text, history, model = 'auto' }) => {
+  return ipc.handleQueryStream(
+    text, history,
+    token   => { if (!event.sender.isDestroyed()) event.sender.send('token', token); },
+    model,
+    chosen  => { if (!event.sender.isDestroyed()) event.sender.send('model-selected', chosen); }
+  );
 });
 
 ipcMain.on('hide-window', () => {
@@ -160,8 +212,7 @@ function createNotifyWindow(email, result) {
 ipcMain.on('email-action', async (_ev, { type, email, draft }) => {
   if (type === 'send' && email && draft) {
     try {
-      const { send } = require('./email/gmail');
-      await send(email.from, `Re: ${email.subject}`, draft, email.threadId);
+      await gmail.send(email.from, `Re: ${email.subject}`, draft, email.threadId);
       console.log('[email] sent from notification window to', email.from);
     } catch (e) {
       console.error('[email] send error:', e.message);
@@ -170,9 +221,82 @@ ipcMain.on('email-action', async (_ev, { type, email, draft }) => {
   // ignore / flag — no further action needed from this side
 });
 
+// ── Email first-run setup window (Phase 17) ──────────────────────────────────
+
+let setupWin             = null;
+let _pendingSetupResolve = null;
+let _pendingSetupReject  = null;
+
+function createSetupWindow() {
+  if (setupWin && !setupWin.isDestroyed()) { setupWin.focus(); return; }
+
+  setupWin = new BrowserWindow({
+    width:       480,
+    height:      520,
+    frame:       false,
+    alwaysOnTop: true,
+    resizable:   false,
+    show:        false,
+    webPreferences: {
+      nodeIntegration:  true,
+      contextIsolation: false,
+    },
+  });
+
+  setupWin.loadFile(path.join(__dirname, 'email', 'setup-window.html'));
+  setupWin.once('ready-to-show', () => { setupWin.center(); setupWin.show(); setupWin.focus(); });
+
+  setupWin.on('closed', () => {
+    setupWin = null;
+    if (_pendingSetupReject) {
+      _pendingSetupReject(new Error('Gmail setup cancelled'));
+      _pendingSetupResolve = null;
+      _pendingSetupReject  = null;
+    }
+  });
+}
+
+ipcMain.handle('email-setup-browse', async () => {
+  const { dialog } = require('electron');
+  const result = await dialog.showOpenDialog(setupWin ?? null, {
+    title:      'Select Gmail Credentials JSON',
+    filters:    [{ name: 'JSON files', extensions: ['json'] }],
+    properties: ['openFile'],
+  });
+  if (result.canceled || !result.filePaths.length) return null;
+  try { return fs.readFileSync(result.filePaths[0], 'utf8'); } catch { return null; }
+});
+
+ipcMain.on('email-setup-save', (_ev, { client_id, client_secret }) => {
+  const motkraDir = path.join(os.homedir(), '.motkra');
+  const credFile  = path.join(motkraDir, 'gmail-credentials.json');
+  const creds     = { installed: { client_id, client_secret, redirect_uris: ['http://localhost:3456/oauth2callback'] } };
+  fs.mkdirSync(motkraDir, { recursive: true });
+  fs.writeFileSync(credFile, JSON.stringify(creds, null, 2));
+  console.log('[email] Credentials saved to', credFile);
+  if (setupWin && !setupWin.isDestroyed()) setupWin.close();
+  if (_pendingSetupResolve) {
+    _pendingSetupResolve();
+    _pendingSetupResolve = null;
+    _pendingSetupReject  = null;
+  }
+});
+
 // ── App lifecycle ─────────────────────────────────────────────────────────
 
 app.whenReady().then(() => {
+  // Grant microphone access for the Web Speech API.
+  // Electron's STT uses the 'audioCapture' permission (not 'media'), so both
+  // must be allowed. setPermissionCheckHandler covers cached/pre-check lookups;
+  // setPermissionRequestHandler covers live prompt requests.
+  const MIC_PERMS = ['media', 'audioCapture'];
+  session.defaultSession.setPermissionCheckHandler((_wc, permission) =>
+    MIC_PERMS.includes(permission)
+  );
+  session.defaultSession.setPermissionRequestHandler((_wc, permission, cb) =>
+    cb(MIC_PERMS.includes(permission))
+  );
+
   // Tray-only app: hide dock on macOS
   if (process.platform === 'darwin') app.dock?.hide();
 
@@ -187,6 +311,13 @@ app.whenReady().then(() => {
     onQuit:        () => app.quit(),
     onEmailToggle: toggleEmailMonitor,
   });
+
+  // Wire first-run setup window for when gmail-credentials.json is missing
+  gmail.setOnCredentialsNeeded(() => new Promise((resolve, reject) => {
+    _pendingSetupResolve = resolve;
+    _pendingSetupReject  = reject;
+    createSetupWindow();
+  }));
 
   // ── Email monitor (Phase 17) — start if enabled ──────────────────────
   if (process.env.MOTKRA_EMAIL_ENABLED === '1') {
@@ -225,7 +356,11 @@ function startEmailMonitor() {
       createNotifyWindow(email, { ...result, trust });
     },
   }).catch(e => {
-    console.error('[email] monitor start error:', e.message);
+    if (e.message === 'Gmail setup cancelled') {
+      console.log('[email] Setup was cancelled — email agent not started.');
+    } else {
+      console.error('[email] monitor start error:', e.message);
+    }
     _emailRunning = false;
   });
 }
@@ -242,6 +377,7 @@ function toggleEmailMonitor() {
 app.on('will-quit', () => {
   globalShortcut.unregisterAll();
   ipc.stopServer();
+  stopSTT();
   if (_emailRunning) monitor.stop();
 });
 
