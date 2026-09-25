@@ -509,6 +509,15 @@ function setBadge(model) {
 
 window.motkra.onModelSelected(model => setBadge(model));
 
+// Privacy brain decision for the current query: kept with the history so private turns
+// never reach the cloud later, and shown on the badge.
+let _route = null;
+window.motkra.onRouteInfo(info => {
+  _route = info;
+  if (info.private) modelBadge.textContent += ' 🔒';
+  modelBadge.title = info.reason || '';
+});
+
 // ── Register token stream handler once ───────────────────────────────────
 window.motkra.onToken(token => {
   if (!curBubble) return;
@@ -866,6 +875,7 @@ async function send() {
   inputEl.style.height = 'auto';
 
   history.push({ role: 'user', content: text });
+  _route = null;
 
   curBubble      = addBubble('assistant', modelBadge.textContent);
   curBubble._raw = '';
@@ -879,7 +889,9 @@ async function send() {
     renderAnswer(curBubble, full);
     addAnswerActions(curBubble.parentNode, { question: text, answer: full, model: modelBadge.textContent });
     curBubble._raw = '';
-    history.push({ role: 'assistant', content: full });
+    const priv = !!_route?.private;
+    history[history.length - 1].private = priv;
+    history.push({ role: 'assistant', content: full, private: priv });
     curBubble = null;
 
     // Read response aloud if TTS is on

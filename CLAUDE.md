@@ -8,10 +8,19 @@ This workspace contains two independent sub-projects plus a legacy quantum-compu
 
 ```
 Quantum/
-├── dual_ai/          Python CLI — interactive dual-model chat (Claude + Gemma 4)
+├── dual_ai/          Python CLI + privacy brain / desktop daemon (Claude + Gemma 4 + Kimi)
 ├── dual_ai_ext/      VS Code extension — sidebar agent panel backed by dual_ai
+├── motkra-daemon/    Electron tray app — global-hotkey chat window, Gmail agent; routes through the dual_ai brain
+├── motkra-browser/   Browser extension — talks to motkra-daemon on 127.0.0.1:7432
+├── motkra-mcp/       MCP server exposing local Ollama models
 └── bell_state/       Qiskit bell-state experiments (separate, unrelated to dual_ai)
 ```
+
+`MOTKRA_PLAN.md` is the phased roadmap.
+
+### motkra-daemon (Electron)
+
+`npm start` / `npm test` (node:test). Owns port 7432 (VS Code + browser extensions). On startup `brain.js` spawns `python ../dual_ai/daemon.py --headless` on 7433 (`MOTKRA_PYTHON`, `MOTKRA_BRAIN_PORT` override) and every query goes through `/route`: the brain picks local vs cloud, redacts secrets and drops private turns; Electron streams the reply, restores placeholders, restores them in tool inputs and redacts tool output through `/redact` (fails closed). If the brain is unreachable it falls back to the keyword router, and never sends a conversation already marked private to the cloud. The HTTP server accepts only requests without Origin or from browser extensions.
 
 The extension (`dual_ai_ext`) and CLI (`dual_ai`) share one `.env` file located at `dual_ai/.env`. The extension loads it via `dotenv` from a relative path (`../dual_ai/.env`).
 
@@ -44,9 +53,12 @@ Local-first: the local model answers what it can; Claude (or Kimi) gets the rest
 - `router.py` — `smart_route()` (v3): redact → `looks_personal()` bilingual lexicon keeps personal topics local → `intent_route()` bilingual intent rules. No model call. `quick_answer()` decides when the local model can skip its hidden reasoning. `route()` (keyword v1) and `triage()` (Gemma triage v2) remain for benchmark comparison
 - `claude_client.py` / `gemma_client.py` / `kimi_client.py` — each exposes `generate(messages, system, on_text) -> Reply(text, input_tokens, output_tokens)` and `ask()` for streaming to stdout. Gemma resolves `think` per message via `should_think()`; Kimi is raw `requests` SSE against NVIDIA's OpenAI-compatible endpoint
 - `stats.py` — per-session and all-time counters in `~/.motkra/cli_stats.json` (local share, private kept local, redactions, Claude spend, estimated savings)
-- `main.py` — REPL. Cloud payloads are always redacted and exclude private turns; once a conversation has a private turn, auto mode keeps it local. Commands `/auto /local /cloud /kimi /stats /clear /history /quit`
+- `session.py` — one conversation: `Session.ask()` applies the privacy rules (cloud payloads are always redacted and exclude private turns; once a conversation has a private turn, auto mode keeps it local). `plan()` is the stateless version for callers that keep their own history (the Electron app)
+- `main.py` — REPL on top of `Session`. Commands `/auto /local /cloud /kimi /stats /clear /history /quit`
+- `daemon.py` — desktop daemon and "privacy brain". `python daemon.py` = tray + push-to-talk hotkey + local voice + localhost API; `--headless` = API only (what `motkra-daemon` spawns). API on `DAEMON_PORT` (7433): `/status`, `/ask`, `/route`, `/redact`, `/mode`, `/clear`. Refuses browser origins and non-localhost Host headers. Extras: `pip install -r requirements-daemon.txt`
+- `voice.py` — faster-whisper STT, Piper TTS (first `.onnx` in `~/.motkra/voices`, else the Windows voice), `SentenceBuffer` speaks replies sentence by sentence and skips code blocks
 - `bench/` — routing benchmark (see `bench/README.md`): `python bench/run.py`, report in `bench/reports/<machine>.md`. Results are cached per machine in `bench/results/<machine>/`; cloud answers are shared in `bench/results/cloud_answers.jsonl`
-- Tests: `cd dual_ai && python -m pytest` (pure-function tests for privacy and routing)
+- Tests: `cd dual_ai && python -m pytest` (privacy, routing, session, voice text helpers, daemon API)
 
 ---
 

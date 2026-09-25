@@ -21,6 +21,7 @@ for (const loc of ENV_CANDIDATES) {
 
 const tray    = require('./tray');
 const ipc     = require('./ipc');
+const brain   = require('./brain');
 const fsTools = require('./fs-tools');
 const monitor = require('./email/monitor');
 const gmail   = require('./email/gmail');
@@ -189,7 +190,8 @@ ipcMain.handle('query-stream', async (event, { text, history, model = 'auto' }) 
     token  => send('token', token),
     model,
     chosen => send('model-selected', chosen),
-    agent
+    agent,
+    info   => send('route-info', info)
   );
 });
 
@@ -358,6 +360,10 @@ app.whenReady().then(() => {
   const port = parseInt(process.env.MOTKRA_DAEMON_PORT ?? '7432', 10);
   ipc.startServer(port);
 
+  // Privacy brain (dual_ai/daemon.py): router v3 + secret redaction. Falls back to the
+  // keyword router if Python or the monorepo is not available.
+  brain.start();
+
   // System tray icon and context menu
   tray.createTray({
     onOpenChat:    createChatWindow,
@@ -430,6 +436,7 @@ function toggleEmailMonitor() {
 
 app.on('will-quit', () => {
   globalShortcut.unregisterAll();
+  brain.stop();
   ipc.stopServer();
   stopSTT();
   if (_emailRunning) monitor.stop();

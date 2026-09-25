@@ -36,6 +36,12 @@ contextBridge.exposeInMainWorld('motkra', {
    */
   onModelSelected: cb => ipcRenderer.on('model-selected', (_ev, model) => cb(model)),
 
+  /**
+   * Fires once per query with the privacy brain's decision.
+   * @param {(info:{target:string, reason:string, private:boolean, redacted:boolean}) => void} cb
+   */
+  onRouteInfo: cb => ipcRenderer.on('route-info', (_ev, info) => cb(info)),
+
   /** Start local Windows STT (spawns stt-win.ps1). */
   sttStart: () => ipcRenderer.invoke('stt-start'),
 

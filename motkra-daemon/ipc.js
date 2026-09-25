@@ -2,6 +2,7 @@
 
 const http = require('http');
 const fsTools = require('./fs-tools');
+const brain   = require('./brain');
 
 let _server = null;
 
@@ -33,17 +34,13 @@ function route(text) {
 
 // ── Gemma streaming (Ollama) ──────────────────────────────────────────────
 
-async function handleGemmaStream(text, history, onToken) {
-  const messages = [
-    { role: 'system', content: SYSTEM },
-    ...(Array.isArray(history) ? history : []),
-    { role: 'user', content: text },
-  ];
-
+/** @param {boolean|null} think  hidden reasoning; the brain turns it off for quick questions (~5x faster) */
+async function handleGemmaStream(messages, system, onToken, think = null) {
   const body = JSON.stringify({
     model:    process.env.GEMMA_MODEL ?? 'gemma4:e2b',
-    messages,
+    messages: [{ role: 'system', content: system }, ...messages],
     stream:   true,
+    ...(typeof think === 'boolean' ? { think } : {}),
   });
 
   return new Promise((resolve, reject) => {
@@ -89,36 +86,40 @@ const AGENT_NOTE =
 const MAX_TOOL_TURNS = 15;
 
 /**
- * @param {object|null} agent  { ask, onActivity } enables the filesystem tools (chat window only)
+ * @param {Array}       messages  prepared payload: redacted, without private turns when `privacy` is set
+ * @param {object|null} agent     { ask, onActivity } enables the filesystem tools (chat window only)
+ * @param {object|null} privacy   { secrets, note } from the brain: the reply and tool inputs are
+ *                                restored, tool output is redacted before it reaches Claude
  */
-async function handleClaudeStream(text, history, onToken, agent = null) {
+async function handleClaudeStream(messages, onToken, agent = null, privacy = null) {
   const { default: Anthropic } = require('@anthropic-ai/sdk');
   const client = new Anthropic();
-
-  const messages = [
-    ...(Array.isArray(history) ? history : []).filter(
-      m => m.role === 'user' || m.role === 'assistant'
-    ),
-    { role: 'user', content: text },
-  ];
+  messages = [...messages];
+  const secrets = privacy ? { ...privacy.secrets } : null;
 
   const params = {
     model:         'claude-opus-4-7',
     max_tokens:    16000,
     thinking:      { type: 'adaptive' },
     output_config: { effort: 'high' },
-    system:        [{ type: 'text', text: SYSTEM + (agent ? AGENT_NOTE : ''), cache_control: { type: 'ephemeral' } }],
+    system:        [{
+      type: 'text',
+      text: SYSTEM + (agent ? AGENT_NOTE : '') + (privacy?.note ?? ''),
+      cache_control: { type: 'ephemeral' },
+    }],
     messages,
     ...(agent ? { tools: fsTools.TOOLS } : {}),
   };
 
   let fullText = '';
-  const emit = t => { onToken(t); fullText += t; };
+  const emit = t => { if (t) { onToken(t); fullText += t; } };
 
   for (let turn = 0; turn < MAX_TOOL_TURNS; turn++) {
+    const restorer = new brain.StreamRestorer(secrets);
     const stream = client.messages.stream(params);
-    stream.on('text', emit);
+    stream.on('text', t => emit(restorer.feed(t)));
     const msg = await stream.finalMessage();
+    emit(restorer.flush());
     if (!agent || msg.stop_reason !== 'tool_use') return fullText;
 
     messages.push({ role: 'assistant', content: msg.content });
@@ -126,7 +127,13 @@ async function handleClaudeStream(text, history, onToken, agent = null) {
     for (const block of msg.content) {
       if (block.type !== 'tool_use') continue;
       try {
-        const out = await fsTools.runTool(block.name, block.input, agent);
+        const input = secrets ? brain.restoreDeep(block.input, secrets) : block.input;
+        let out = await fsTools.runTool(block.name, input, agent);
+        if (secrets) {
+          const r = await brain.redact(String(out), secrets);   // throws if the brain is down: fail closed
+          out = r.text;
+          Object.assign(secrets, r.secrets);
+        }
         results.push({ type: 'tool_result', tool_use_id: block.id, content: out });
       } catch (err) {
         agent.onActivity?.(`⚠ ${err.message}`);
@@ -153,22 +160,58 @@ async function handleClaudeStream(text, history, onToken, agent = null) {
  * @param {Function} onModel  Called once with the chosen model name before first token
  * @param {object}   agent    { ask, onActivity } to enable filesystem tools (chat window only)
  */
-async function handleQueryStream(text, history, onToken, model = 'auto', onModel = null, agent = null) {
-  const chosen = model === 'auto' ? route(text) : model;
-  onModel?.(chosen);
-  if (chosen === 'gemma') {
-    return await handleGemmaStream(text, history, onToken);
+async function handleQueryStream(text, history, onToken, model = 'auto', onModel = null, agent = null, onRoute = null) {
+  const prior = (Array.isArray(history) ? history : [])
+    .filter(m => (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string');
+  const plan = await brain.plan([...prior, { role: 'user', content: text }], model);
+
+  if (plan) {
+    const chosen = plan.target === 'local' ? 'gemma' : 'claude';
+    onModel?.(chosen);
+    onRoute?.({ target: chosen, reason: plan.reason, private: plan.private, redacted: plan.redacted });
+    if (chosen === 'gemma') return await handleGemmaStream(plan.messages, plan.system, onToken, plan.think);
+    return await handleClaudeStream(plan.messages, onToken, agent, { secrets: plan.secrets, note: plan.redaction_note });
   }
-  return await handleClaudeStream(text, history, onToken, agent);
+
+  // Brain unavailable: basic keyword router, no redaction. A conversation already marked
+  // private never falls back to the cloud.
+  const wasPrivate = prior.some(m => m.private);
+  const chosen = wasPrivate ? 'gemma' : model === 'auto' ? route(text) : model;
+  const messages = [...prior.map(m => ({ role: m.role, content: m.content })), { role: 'user', content: text }];
+  onModel?.(chosen);
+  onRoute?.({ target: chosen, reason: 'basic router (privacy brain offline)', private: wasPrivate, redacted: false });
+  if (chosen === 'gemma') return await handleGemmaStream(messages, SYSTEM, onToken);
+  return await handleClaudeStream(messages, onToken, agent);
 }
 
 // ── HTTP server (browser extension + VS Code extension) ───────────────────
 
+const EXTENSION_ORIGIN = /^(chrome|moz|edge|safari-web)-extension:\/\/[\w.-]+$/i;
+
+/**
+ * Only local callers may use the server: the VS Code extension (no Origin header) and
+ * the Motkra browser extension (chrome-extension://…). Web pages are refused, because any
+ * site you visit can send requests to 127.0.0.1. The Host check blocks DNS rebinding.
+ */
+function allowedRequest({ host, origin }, port) {
+  if (host !== `127.0.0.1:${port}` && host !== `localhost:${port}`) return false;
+  return !origin || EXTENSION_ORIGIN.test(origin);
+}
+
 function startServer(port) {
   _server = http.createServer(async (req, res) => {
-    res.setHeader('Access-Control-Allow-Origin',  '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    const origin = req.headers.origin;
+    if (!allowedRequest({ host: req.headers.host, origin }, port)) {
+      res.writeHead(403, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'forbidden' }));
+      return;
+    }
+    if (origin) {
+      res.setHeader('Access-Control-Allow-Origin',  origin);
+      res.setHeader('Vary',                         'Origin');
+      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    }
 
     if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
 
@@ -221,4 +264,4 @@ function stopServer() {
   _server = null;
 }
 
-module.exports = { handleQueryStream, startServer, stopServer };
+module.exports = { allowedRequest, handleQueryStream, startServer, stopServer };
