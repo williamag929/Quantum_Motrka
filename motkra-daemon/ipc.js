@@ -1,6 +1,7 @@
 'use strict';
 
 const http = require('http');
+const fsTools = require('./fs-tools');
 
 let _server = null;
 
@@ -16,7 +17,11 @@ const SYSTEM =
 const LOCAL_HINTS = ['quick','brief','short','fast','simple','summarize','tldr','private','offline','local'];
 const CLOUD_HINTS = ['explain','analyze','generate','implement','fix','edit','refactor','design','debug','create','write','build','how do','how does'];
 
+// Absolute Windows or Unix-style paths: the local model has no file tools, so these go to Claude.
+const PATH_RE = /(?:^|[\s"'`(])(?:[a-zA-Z]:[\\/]|~[\\/]|\/(?:home|users|mnt|opt|srv|var|etc)\/)/i;
+
 function route(text) {
+  if (PATH_RE.test(text)) return 'claude';
   const lower = text.toLowerCase();
   const words = lower.split(/\s+/).filter(Boolean);
   const localScore = LOCAL_HINTS.filter(h => lower.includes(h)).length;
@@ -75,7 +80,18 @@ async function handleGemmaStream(text, history, onToken) {
 
 // ── Claude streaming ──────────────────────────────────────────────────────
 
-async function handleClaudeStream(text, history, onToken) {
+const AGENT_NOTE =
+  '\n\nYou can work with files on the user\'s computer through the list_directory, read_file and write_file tools. ' +
+  'When the user mentions a folder or file, use the tools instead of asking them to paste content: ' +
+  'start with list_directory, then read the files that matter. The user is asked to approve each new folder; ' +
+  'if access is denied, say so and continue with what you have. Only write files when the user asked for changes.';
+
+const MAX_TOOL_TURNS = 15;
+
+/**
+ * @param {object|null} agent  { ask, onActivity } enables the filesystem tools (chat window only)
+ */
+async function handleClaudeStream(text, history, onToken, agent = null) {
   const { default: Anthropic } = require('@anthropic-ai/sdk');
   const client = new Anthropic();
 
@@ -86,24 +102,42 @@ async function handleClaudeStream(text, history, onToken) {
     { role: 'user', content: text },
   ];
 
-  let fullText = '';
-
-  const stream = client.messages.stream({
+  const params = {
     model:         'claude-opus-4-7',
-    max_tokens:    4096,
+    max_tokens:    16000,
     thinking:      { type: 'adaptive' },
     output_config: { effort: 'high' },
-    system:        [{ type: 'text', text: SYSTEM, cache_control: { type: 'ephemeral' } }],
+    system:        [{ type: 'text', text: SYSTEM + (agent ? AGENT_NOTE : ''), cache_control: { type: 'ephemeral' } }],
     messages,
-  });
+    ...(agent ? { tools: fsTools.TOOLS } : {}),
+  };
 
-  for await (const event of stream) {
-    if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
-      onToken(event.delta.text);
-      fullText += event.delta.text;
+  let fullText = '';
+  const emit = t => { onToken(t); fullText += t; };
+
+  for (let turn = 0; turn < MAX_TOOL_TURNS; turn++) {
+    const stream = client.messages.stream(params);
+    stream.on('text', emit);
+    const msg = await stream.finalMessage();
+    if (!agent || msg.stop_reason !== 'tool_use') return fullText;
+
+    messages.push({ role: 'assistant', content: msg.content });
+    const results = [];
+    for (const block of msg.content) {
+      if (block.type !== 'tool_use') continue;
+      try {
+        const out = await fsTools.runTool(block.name, block.input, agent);
+        results.push({ type: 'tool_result', tool_use_id: block.id, content: out });
+      } catch (err) {
+        agent.onActivity?.(`⚠ ${err.message}`);
+        results.push({ type: 'tool_result', tool_use_id: block.id, content: err.message, is_error: true });
+      }
     }
+    messages.push({ role: 'user', content: results });
+    if (fullText && !fullText.endsWith('\n')) emit('\n\n');
   }
 
+  emit('\n\n(Stopped after too many file operations. Ask me to continue if needed.)');
   return fullText;
 }
 
@@ -117,14 +151,15 @@ async function handleClaudeStream(text, history, onToken) {
  * @param {Function} onToken  Called for each streamed text chunk
  * @param {string}   model    'auto' | 'claude' | 'gemma'
  * @param {Function} onModel  Called once with the chosen model name before first token
+ * @param {object}   agent    { ask, onActivity } to enable filesystem tools (chat window only)
  */
-async function handleQueryStream(text, history, onToken, model = 'auto', onModel = null) {
+async function handleQueryStream(text, history, onToken, model = 'auto', onModel = null, agent = null) {
   const chosen = model === 'auto' ? route(text) : model;
   onModel?.(chosen);
   if (chosen === 'gemma') {
     return await handleGemmaStream(text, history, onToken);
   }
-  return await handleClaudeStream(text, history, onToken);
+  return await handleClaudeStream(text, history, onToken, agent);
 }
 
 // ── HTTP server (browser extension + VS Code extension) ───────────────────

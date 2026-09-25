@@ -203,7 +203,22 @@ npm run build:all             # all platforms
 | GET | `/status` | Health check |
 | POST | `/query` | Chat (streaming SSE or one-shot JSON) |
 
-Reads `ANTHROPIC_API_KEY` from (in order): `~/.motkra/.env`, `../dual_ai/.env`, `%APPDATA%/Motkra/.env`.
+Reads `ANTHROPIC_API_KEY` from the first file found: `~/.motkra/.env`, `../dual_ai/.env`, `%APPDATA%/Motkra/.env`.
+
+#### Working with folders (chat window)
+
+Mention a folder or file in the chat (`explain D:\Projects\MyApp`) and Motkra works on it with `list_directory`, `read_file` and `write_file`. Messages that contain a path are sent to Claude, because the local model has no file tools.
+
+- **Permission per folder.** The first time Motkra needs a folder, a prompt offers **Allow once**, **This session**, **Always** or **Deny**. A grant covers the folder and its subfolders for one operation. Reading and writing are asked separately. **Esc** denies, and an unanswered prompt is denied after 2 minutes.
+- **Never shared:** `.env` files, private keys (`*.pem`, `id_rsa`, …) and `~/.ssh`, `~/.aws`, `~/.motkra`, even inside an allowed folder.
+- `/folders` lists current permissions and `/forget` removes them all. "Always" grants live in `~/.motkra/permissions.json`, and every access is logged to `~/.motkra/fs-audit.jsonl`.
+- File tools are only available in the chat window, not through the HTTP API.
+
+#### Answers
+
+Hover a paragraph or code block to copy just that part, or use **⧉ Copy** under the answer. **👍 / 👎** marks an answer right or wrong; ratings are stored locally in `~/.motkra/feedback.jsonl` and never sent anywhere.
+
+Run the daemon's tests with `npm test`.
 
 #### Email Agent
 

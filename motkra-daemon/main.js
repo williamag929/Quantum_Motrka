@@ -1,11 +1,12 @@
 'use strict';
 
 const {
-  app, BrowserWindow, globalShortcut, ipcMain, shell, session
+  app, BrowserWindow, clipboard, globalShortcut, ipcMain, shell, session
 } = require('electron');
-const path = require('path');
-const fs   = require('fs');
-const os   = require('os');
+const path   = require('path');
+const fs     = require('fs');
+const os     = require('os');
+const crypto = require('crypto');
 
 // ── Load API key from first found .env ────────────────────────────────────
 
@@ -20,6 +21,7 @@ for (const loc of ENV_CANDIDATES) {
 
 const tray    = require('./tray');
 const ipc     = require('./ipc');
+const fsTools = require('./fs-tools');
 const monitor = require('./email/monitor');
 const gmail   = require('./email/gmail');
 
@@ -146,13 +148,65 @@ ipcMain.handle('stt-start', event => {
 
 ipcMain.handle('stt-stop', () => stopSTT());
 
+// ── Folder permission prompts (agent file tools) ─────────────────────────
+
+const _pendingPermissions = new Map(); // id → resolve(scope)
+const PERMISSION_TIMEOUT_MS = 2 * 60 * 1000;
+
+function askFolderPermission(win, request) {
+  return new Promise(resolve => {
+    if (!win || win.isDestroyed()) return resolve('deny');
+    const id = crypto.randomUUID();
+    _pendingPermissions.set(id, resolve);
+    if (!win.isVisible()) win.show();
+    win.focus();
+    win.webContents.send('fs-permission-request', { id, ...request });
+    setTimeout(() => {
+      if (_pendingPermissions.delete(id)) resolve('deny');
+    }, PERMISSION_TIMEOUT_MS);
+  });
+}
+
+ipcMain.on('fs-permission-response', (event, { id, scope }) => {
+  if (!chatWin || event.sender !== chatWin.webContents) return;
+  const resolve = _pendingPermissions.get(id);
+  if (!resolve) return;
+  _pendingPermissions.delete(id);
+  resolve(fsTools.SCOPES.includes(scope) ? scope : 'deny');
+});
+
+ipcMain.handle('fs-grants', () => fsTools.listGrants());
+ipcMain.handle('fs-revoke-all', () => { fsTools.revokeAll(); return true; });
+
 ipcMain.handle('query-stream', async (event, { text, history, model = 'auto' }) => {
+  const win   = BrowserWindow.fromWebContents(event.sender);
+  const send  = (channel, payload) => { if (!event.sender.isDestroyed()) event.sender.send(channel, payload); };
+  const agent = win === chatWin
+    ? { ask: request => askFolderPermission(win, request), onActivity: line => send('tool-activity', line) }
+    : null;
   return ipc.handleQueryStream(
     text, history,
-    token   => { if (!event.sender.isDestroyed()) event.sender.send('token', token); },
+    token  => send('token', token),
     model,
-    chosen  => { if (!event.sender.isDestroyed()) event.sender.send('model-selected', chosen); }
+    chosen => send('model-selected', chosen),
+    agent
   );
+});
+
+// ── Copy and answer feedback ─────────────────────────────────────────────
+
+ipcMain.handle('copy-text', (_event, text) => { clipboard.writeText(String(text ?? '')); return true; });
+
+const FEEDBACK_FILE = path.join(os.homedir(), '.motkra', 'feedback.jsonl');
+
+ipcMain.handle('feedback', (_event, { rating, model, question, answer }) => {
+  if (!['up', 'down', null].includes(rating)) return false;
+  fs.mkdirSync(path.dirname(FEEDBACK_FILE), { recursive: true });
+  fs.appendFileSync(FEEDBACK_FILE, JSON.stringify({
+    ts: new Date().toISOString(), rating, model: String(model ?? ''),
+    question: String(question ?? ''), answer: String(answer ?? ''),
+  }) + '\n');
+  return true;
 });
 
 ipcMain.on('hide-window', () => {

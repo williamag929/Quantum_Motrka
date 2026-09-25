@@ -314,6 +314,96 @@
   #mic-modal button:hover { opacity: .85; }
   #mic-allow  { background: var(--teal);   color: #111; }
   #mic-deny   { background: var(--bg3);    color: var(--fg); border: 1px solid var(--border); }
+
+  /* ── Answer blocks: copy per paragraph / code block ── */
+  .blk { position: relative; }
+  .blk + .blk { margin-top: 8px; }
+  .blk-copy {
+    position: absolute;
+    top: 0; right: -4px;
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    color: var(--fg-dim);
+    font-size: 10px;
+    padding: 1px 5px;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity .12s;
+  }
+  .blk:hover .blk-copy { opacity: 1; }
+  .blk-copy:hover { color: var(--fg); }
+
+  /* ── Answer actions: copy all, like, unlike ── */
+  .actions { display: flex; gap: 4px; margin-top: 2px; }
+  .act {
+    background: none;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    color: var(--fg-dim);
+    font-size: 11px;
+    padding: 1px 6px;
+    cursor: pointer;
+    opacity: .6;
+  }
+  .act:hover { opacity: 1; border-color: var(--border); }
+  .act.on    { opacity: 1; border-color: var(--teal); background: #10342a; }
+  .act.down.on { border-color: var(--red); background: #3a1a1a; }
+
+  /* ── Agent file activity ── */
+  .activity { font-size: 10.5px; color: var(--fg-dim); display: flex; flex-direction: column; gap: 1px; }
+  .activity div { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* ── Folder permission modal ── */
+  #perm-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,.6);
+    z-index: 110;
+    align-items: center;
+    justify-content: center;
+    -webkit-app-region: no-drag;
+  }
+  #perm-overlay.visible { display: flex; }
+  #perm-modal {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px 18px 16px;
+    width: 400px;
+    max-width: calc(100vw - 24px);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    box-shadow: 0 8px 32px rgba(0,0,0,.5);
+  }
+  #perm-modal h3 { font-size: 13px; color: #fff; }
+  #perm-folder {
+    font-family: 'Cascadia Code', 'Consolas', monospace;
+    font-size: 11px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 6px 8px;
+    word-break: break-all;
+    user-select: text;
+  }
+  #perm-modal p { font-size: 11px; color: var(--fg-dim); line-height: 1.5; }
+  #perm-actions { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-top: 4px; }
+  #perm-actions button {
+    padding: 7px 0;
+    border-radius: 5px;
+    border: 1px solid var(--border);
+    background: var(--bg3);
+    color: var(--fg);
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  #perm-actions button:hover { border-color: var(--fg-dim); }
+  #perm-actions button[data-scope="once"] { background: var(--teal); color: #111; border-color: var(--teal); }
+  #perm-actions button[data-scope="deny"]:hover { border-color: var(--red); color: var(--err); }
 </style>
 </head>
 <body>
@@ -341,6 +431,7 @@
     <div class="big">🤖</div>
     <div>Speak or type — Motkra is listening</div>
     <div style="opacity:.6;font-size:11px">Ctrl+Shift+Space to toggle  ·  🎙 to use your voice</div>
+    <div style="opacity:.6;font-size:11px">Mention a folder (D:\Projects\…) to let Motkra work on it  ·  /folders</div>
   </div>
 </div>
 
@@ -353,6 +444,21 @@
     <div class="modal-actions">
       <button id="mic-allow">Allow</button>
       <button id="mic-deny">Not now</button>
+    </div>
+  </div>
+</div>
+
+<!-- Folder permission modal (agent file tools) -->
+<div id="perm-overlay">
+  <div id="perm-modal" role="dialog" aria-labelledby="perm-title">
+    <h3 id="perm-title">🔒 Allow Motkra to read this folder?</h3>
+    <div id="perm-folder"></div>
+    <p id="perm-note"></p>
+    <div id="perm-actions">
+      <button data-scope="once"    title="Only this request">Allow once</button>
+      <button data-scope="session" title="Until Motkra restarts">This session</button>
+      <button data-scope="always"  title="Remember (type /forget to undo)">Always</button>
+      <button data-scope="deny">Deny</button>
     </div>
   </div>
 </div>
@@ -411,18 +517,149 @@ window.motkra.onToken(token => {
   messagesEl.scrollTop = messagesEl.scrollHeight;
 });
 
+// ── Agent file activity ───────────────────────────────────────────────────
+window.motkra.onToolActivity(line => {
+  if (!curBubble) return;
+  const wrapper = curBubble.parentNode;
+  let box = wrapper.querySelector('.activity');
+  if (!box) {
+    box = document.createElement('div');
+    box.className = 'activity';
+    wrapper.insertBefore(box, curBubble);
+  }
+  const row = document.createElement('div');
+  row.textContent = line;
+  row.title = line;
+  box.appendChild(row);
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+});
+
+// ── Folder permission prompt ──────────────────────────────────────────────
+const permOverlay = document.getElementById('perm-overlay');
+const permTitle   = document.getElementById('perm-title');
+const permFolder  = document.getElementById('perm-folder');
+const permNote    = document.getElementById('perm-note');
+const permQueue   = [];
+
+function showNextPermission() {
+  const req = permQueue[0];
+  if (!req) { permOverlay.classList.remove('visible'); return; }
+  const write = req.op === 'write';
+  permTitle.textContent  = write ? '✏️ Allow Motkra to change files in this folder?'
+                                 : '🔒 Allow Motkra to read this folder?';
+  permFolder.textContent = req.folder;
+  permNote.textContent   = write
+    ? `It wants to create or overwrite: ${req.target}`
+    : 'Files you allow are sent to Claude (cloud) to answer you. .env files, SSH keys and other credentials are never shared.';
+  permOverlay.classList.add('visible');
+  permOverlay.querySelector('button[data-scope="once"]').focus();
+}
+
+function answerPermission(scope) {
+  const req = permQueue.shift();
+  if (req) window.motkra.respondPermission(req.id, scope);
+  showNextPermission();
+}
+
+window.motkra.onPermissionRequest(req => {
+  permQueue.push(req);
+  if (permQueue.length === 1) showNextPermission();
+});
+
+document.getElementById('perm-actions').addEventListener('click', e => {
+  const scope = e.target?.dataset?.scope;
+  if (scope) answerPermission(scope);
+});
+
 // ── Helpers ───────────────────────────────────────────────────────────────
 function esc(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
+// Model output (and file contents it quotes) is untrusted: escape everything, then add markup.
+function renderInline(text) {
+  return esc(text)
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.+?)\*/g, '<em>$1</em>');
+}
+
+/** Split an answer into code blocks and paragraphs: [{kind:'code'|'text', raw}] */
+function splitBlocks(text) {
+  const blocks = [];
+  const pushText = s => s.split(/\n{2,}/).map(p => p.trim()).filter(Boolean)
+    .forEach(p => blocks.push({ kind: 'text', raw: p }));
+  const fence = /```[\w+-]*\n?([\s\S]*?)```/g;
+  let last = 0, m;
+  while ((m = fence.exec(text))) {
+    pushText(text.slice(last, m.index));
+    blocks.push({ kind: 'code', raw: m[1].replace(/\s+$/, '') });
+    last = fence.lastIndex;
+  }
+  pushText(text.slice(last));
+  return blocks;
+}
+
 function renderMarkdown(text) {
-  text = text.replace(/```(\w*)\n?([\s\S]*?)```/g,
-    (_, lang, code) => `<pre><code>${esc(code.trimEnd())}</code></pre>`);
-  text = text.replace(/`([^`]+)`/g, (_, c) => `<code>${esc(c)}</code>`);
-  text = text.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-  text = text.replace(/\*(.+?)\*/g,     '<em>$1</em>');
-  return text;
+  return splitBlocks(text)
+    .map(b => b.kind === 'code' ? `<pre><code>${esc(b.raw)}</code></pre>` : renderInline(b.raw))
+    .join('\n\n');
+}
+
+function copyText(text, btn) {
+  window.motkra.copyText(text);
+  const prev = btn.textContent;
+  btn.textContent = '✓';
+  setTimeout(() => { btn.textContent = prev; }, 900);
+}
+
+/** Final answer: one block per paragraph / code block, each with its own copy button. */
+function renderAnswer(bubble, raw) {
+  bubble.innerHTML = '';
+  for (const b of splitBlocks(raw)) {
+    const div = document.createElement('div');
+    div.className = 'blk';
+    div.innerHTML = b.kind === 'code' ? `<pre><code>${esc(b.raw)}</code></pre>` : renderInline(b.raw);
+    const btn = document.createElement('button');
+    btn.className   = 'blk-copy';
+    btn.title       = b.kind === 'code' ? 'Copy code' : 'Copy paragraph';
+    btn.textContent = '⧉';
+    btn.addEventListener('click', () => copyText(b.raw, btn));
+    div.appendChild(btn);
+    bubble.appendChild(div);
+  }
+}
+
+/** Copy-all, 👍 and 👎 under an answer. Feedback is stored locally only. */
+function addAnswerActions(wrapper, { question, answer, model }) {
+  const bar = document.createElement('div');
+  bar.className = 'actions';
+  const mk = (cls, label, title) => {
+    const b = document.createElement('button');
+    b.className = `act ${cls}`; b.textContent = label; b.title = title;
+    bar.appendChild(b);
+    return b;
+  };
+  const copyBtn = mk('copy', '⧉ Copy', 'Copy the whole answer');
+  const upBtn   = mk('up',   '👍', 'Right answer');
+  const downBtn = mk('down', '👎', 'Wrong answer');
+
+  copyBtn.addEventListener('click', () => copyText(answer, copyBtn));
+  let rating = null;
+  const rate = r => {
+    rating = rating === r ? null : r;
+    upBtn.classList.toggle('on', rating === 'up');
+    downBtn.classList.toggle('on', rating === 'down');
+    window.motkra.sendFeedback({ rating, model, question, answer });
+  };
+  upBtn.addEventListener('click', () => rate('up'));
+  downBtn.addEventListener('click', () => rate('down'));
+  wrapper.appendChild(bar);
+}
+
+function addSystemNote(text) {
+  const b = addBubble('assistant', 'Motkra');
+  b.textContent = text;
 }
 
 function addBubble(role, label) {
@@ -591,6 +828,21 @@ async function send() {
     b.textContent = '☁ Switched to Claude — all messages go to the cloud until you type /auto or /local.';
     return;
   }
+  if (text === '/folders') {
+    inputEl.value = '';
+    const grants = await window.motkra.listGrants();
+    addSystemNote(grants.length
+      ? 'Folders Motkra may use:\n' + grants.map(g => `• ${g.op} · ${g.scope} · ${g.folder}`).join('\n') +
+        '\n\nType /forget to remove them all.'
+      : 'No folder permissions yet. Motkra asks the first time it needs a folder.');
+    return;
+  }
+  if (text === '/forget') {
+    inputEl.value = '';
+    await window.motkra.revokeAllGrants();
+    addSystemNote('🔒 All folder permissions removed. Motkra will ask again before using any folder.');
+    return;
+  }
   if (text === '/auto') {
     _modelForce = 'auto';
     modelBadge.textContent = '⚡ Auto';
@@ -624,7 +876,8 @@ async function send() {
     await window.motkra.queryStream(text, history.slice(0, -1), _modelForce);
 
     const full = curBubble._raw;
-    curBubble.innerHTML = renderMarkdown(full);
+    renderAnswer(curBubble, full);
+    addAnswerActions(curBubble.parentNode, { question: text, answer: full, model: modelBadge.textContent });
     curBubble._raw = '';
     history.push({ role: 'assistant', content: full });
     curBubble = null;
@@ -666,6 +919,7 @@ clearBtn.addEventListener('click', () => {
 });
 
 document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && permQueue.length) { answerPermission('deny'); return; }
   if (e.key === 'Escape') {
     stopMic();
     window.speechSynthesis.cancel();

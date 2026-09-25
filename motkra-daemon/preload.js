@@ -48,4 +48,24 @@ contextBridge.exposeInMainWorld('motkra', {
    * @param {(text:string) => void} cb
    */
   onTranscript: cb => ipcRenderer.on('stt-transcript', (_ev, text) => cb(text)),
+
+  /** Agent file-tool progress lines ("📂 Listing D:\\..."). */
+  onToolActivity: cb => ipcRenderer.on('tool-activity', (_ev, line) => cb(line)),
+
+  /** The agent wants to use a folder: cb({id, op, folder, target}); answer with respondPermission. */
+  onPermissionRequest: cb => ipcRenderer.on('fs-permission-request', (_ev, req) => cb(req)),
+
+  /** @param {'once'|'session'|'always'|'deny'} scope */
+  respondPermission: (id, scope) => ipcRenderer.send('fs-permission-response', { id, scope }),
+
+  /** Folders the agent may use: [{op, folder, scope, granted_at}] */
+  listGrants: () => ipcRenderer.invoke('fs-grants'),
+
+  /** Forget every folder permission (session and always). */
+  revokeAllGrants: () => ipcRenderer.invoke('fs-revoke-all'),
+
+  copyText: text => ipcRenderer.invoke('copy-text', text),
+
+  /** Record 👍/👎 for an answer locally in ~/.motkra/feedback.jsonl. rating: 'up' | 'down' | null */
+  sendFeedback: entry => ipcRenderer.invoke('feedback', entry),
 });
