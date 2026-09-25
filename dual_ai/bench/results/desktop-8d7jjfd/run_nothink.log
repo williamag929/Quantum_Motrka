@@ -1,0 +1,246 @@
+Answers to collect: 103 gemma4:e2b+931177-nothink, 0 claude-opus-5-5, 0 claude-opus-5-5+redacted, 0 moonshotai/kimi-k3
+  ✓ gemma4:e2b+931177-nothink      qf01      1.8s  13 tok
+  ✓ gemma4:e2b+931177-nothink      qf02      2.5s  23 tok
+  ✓ gemma4:e2b+931177-nothink      qf03      3.3s  36 tok
+  ✓ gemma4:e2b+931177-nothink      qf04      3.0s  28 tok
+  ✓ gemma4:e2b+931177-nothink      qf05      2.3s  17 tok
+  ✓ gemma4:e2b+931177-nothink      qf06      3.8s  41 tok
+  ✓ gemma4:e2b+931177-nothink      qf07      2.1s  15 tok
+  ✓ gemma4:e2b+931177-nothink      qf08      2.2s  16 tok
+  ✓ gemma4:e2b+931177-nothink      qf09      3.0s  25 tok
+  ✓ gemma4:e2b+931177-nothink      qf10      1.8s  11 tok
+  ✓ gemma4:e2b+931177-nothink      cs01      6.0s  74 tok
+  ✓ gemma4:e2b+931177-nothink      cs02      4.2s  48 tok
+  ✓ gemma4:e2b+931177-nothink      cs03      3.9s  44 tok
+  ✓ gemma4:e2b+931177-nothink      cs04      7.4s  97 tok
+  ✓ gemma4:e2b+931177-nothink      cs05      3.3s  32 tok
+  ✓ gemma4:e2b+931177-nothink      cs06      5.8s  70 tok
+  ✓ gemma4:e2b+931177-nothink      cs07      5.6s  70 tok
+  ✓ gemma4:e2b+931177-nothink      cs08      4.0s  45 tok
+  ✓ gemma4:e2b+931177-nothink      cs09      4.3s  50 tok
+  ✓ gemma4:e2b+931177-nothink      cs10      2.9s  27 tok
+  ✓ gemma4:e2b+931177-nothink      cc01     26.4s  398 tok
+  ✓ gemma4:e2b+931177-nothink      cc02     12.8s  172 tok
+  ✓ gemma4:e2b+931177-nothink      cc03     17.6s  253 tok
+  ✓ gemma4:e2b+931177-nothink      cc04     34.6s  529 tok
+  ✓ gemma4:e2b+931177-nothink      cc05     62.2s  962 tok
+  ✓ gemma4:e2b+931177-nothink      cc06     14.5s  194 tok
+  ✓ gemma4:e2b+931177-nothink      cc07      4.9s  58 tok
+  ✓ gemma4:e2b+931177-nothink      cc08     38.8s  611 tok
+  ✓ gemma4:e2b+931177-nothink      cc09     11.2s  155 tok
+  ✓ gemma4:e2b+931177-nothink      cc10     47.6s  749 tok
+  ✓ gemma4:e2b+931177-nothink      ex01      4.1s  49 tok
+  ✓ gemma4:e2b+931177-nothink      ex02      6.8s  92 tok
+  ✓ gemma4:e2b+931177-nothink      ex03      7.2s  99 tok
+  ✓ gemma4:e2b+931177-nothink      ex04      4.0s  46 tok
+  ✓ gemma4:e2b+931177-nothink      ex05     13.0s  194 tok
+  ✓ gemma4:e2b+931177-nothink      ex06      3.0s  29 tok
+  ✓ gemma4:e2b+931177-nothink      ex07      4.1s  50 tok
+  ✓ gemma4:e2b+931177-nothink      ex08      8.2s  115 tok
+  ✓ gemma4:e2b+931177-nothink      rs01      5.7s  64 tok
+  ✓ gemma4:e2b+931177-nothink      rs02      3.2s  30 tok
+  ✓ gemma4:e2b+931177-nothink      rs03      2.3s  17 tok
+  ✓ gemma4:e2b+931177-nothink      rs04      3.0s  26 tok
+  ✓ gemma4:e2b+931177-nothink      rs05      4.0s  32 tok
+  ✓ gemma4:e2b+931177-nothink      rs06      3.7s  39 tok
+  ✓ gemma4:e2b+931177-nothink      rs07      4.4s  42 tok
+  ✓ gemma4:e2b+931177-nothink      rs08      3.7s  39 tok
+  ✓ gemma4:e2b+931177-nothink      em01      1.7s  2 tok
+  ✓ gemma4:e2b+931177-nothink      em02      1.7s  2 tok
+  ✓ gemma4:e2b+931177-nothink      em03      2.7s  22 tok
+  ✓ gemma4:e2b+931177-nothink      em04      4.5s  49 tok
+  ✓ gemma4:e2b+931177-nothink      em05      4.8s  53 tok
+  ✓ gemma4:e2b+931177-nothink      em06      1.6s  2 tok
+  ✓ gemma4:e2b+931177-nothink      em07      6.8s  88 tok
+  ✓ gemma4:e2b+931177-nothink      em08      3.6s  35 tok
+  ✓ gemma4:e2b+931177-nothink      em09      9.9s  132 tok
+  ✓ gemma4:e2b+931177-nothink      em10      1.6s  3 tok
+  ✓ gemma4:e2b+931177-nothink      re01      5.0s  55 tok
+  ✓ gemma4:e2b+931177-nothink      re02      2.5s  19 tok
+  ✓ gemma4:e2b+931177-nothink      re03     11.3s  159 tok
+  ✓ gemma4:e2b+931177-nothink      re04      3.0s  26 tok
+  ✓ gemma4:e2b+931177-nothink      re05      3.6s  33 tok
+  ✓ gemma4:e2b+931177-nothink      re06      4.7s  54 tok
+  ✓ gemma4:e2b+931177-nothink      re07      2.7s  16 tok
+  ✓ gemma4:e2b+931177-nothink      re08      6.9s  84 tok
+  ✓ gemma4:e2b+931177-nothink      pv01      3.9s  34 tok
+  ✓ gemma4:e2b+931177-nothink      pv02      7.5s  91 tok
+  ✓ gemma4:e2b+931177-nothink      pv03      5.9s  66 tok
+  ✓ gemma4:e2b+931177-nothink      pv04      3.6s  33 tok
+  ✓ gemma4:e2b+931177-nothink      pv05      3.7s  29 tok
+  ✓ gemma4:e2b+931177-nothink      pv06      2.9s  23 tok
+  ✓ gemma4:e2b+931177-nothink      pv07      1.8s  3 tok
+  ✓ gemma4:e2b+931177-nothink      pv08      3.7s  35 tok
+  ✓ gemma4:e2b+931177-nothink      pv09      3.7s  32 tok
+  ✓ gemma4:e2b+931177-nothink      pv10      6.6s  77 tok
+  ✓ gemma4:e2b+931177-nothink      h_qf1     3.6s  35 tok
+  ✓ gemma4:e2b+931177-nothink      h_qf2     3.5s  35 tok
+  ✓ gemma4:e2b+931177-nothink      h_qf3     4.3s  44 tok
+  ✓ gemma4:e2b+931177-nothink      h_qf4     2.0s  13 tok
+  ✓ gemma4:e2b+931177-nothink      h_cs1     6.4s  82 tok
+  ✓ gemma4:e2b+931177-nothink      h_cs2     6.0s  73 tok
+  ✓ gemma4:e2b+931177-nothink      h_cs3     6.9s  89 tok
+  ✓ gemma4:e2b+931177-nothink      h_cs4     2.8s  24 tok
+  ✓ gemma4:e2b+931177-nothink      h_cc1    42.1s  624 tok
+  ✓ gemma4:e2b+931177-nothink      h_cc2    18.4s  264 tok
+  ✓ gemma4:e2b+931177-nothink      h_cc3    77.0s  1208 tok
+  ✓ gemma4:e2b+931177-nothink      h_ex1     4.7s  57 tok
+  ✓ gemma4:e2b+931177-nothink      h_ex2     6.3s  83 tok
+  ✓ gemma4:e2b+931177-nothink      h_ex3     4.6s  57 tok
+  ✓ gemma4:e2b+931177-nothink      h_rs1     2.3s  19 tok
+  ✓ gemma4:e2b+931177-nothink      h_rs2     2.8s  26 tok
+  ✓ gemma4:e2b+931177-nothink      h_rs3     4.1s  44 tok
+  ✓ gemma4:e2b+931177-nothink      h_em1     1.5s  4 tok
+  ✓ gemma4:e2b+931177-nothink      h_em2     1.7s  3 tok
+  ✓ gemma4:e2b+931177-nothink      h_em3     3.4s  36 tok
+  ✓ gemma4:e2b+931177-nothink      h_em4     3.7s  37 tok
+  ✓ gemma4:e2b+931177-nothink      h_re1     2.0s  13 tok
+  ✓ gemma4:e2b+931177-nothink      h_re2     8.4s  117 tok
+  ✓ gemma4:e2b+931177-nothink      h_re3     3.0s  30 tok
+  ✓ gemma4:e2b+931177-nothink      h_pv1     3.8s  38 tok
+  ✓ gemma4:e2b+931177-nothink      h_pv2     4.5s  48 tok
+  ✓ gemma4:e2b+931177-nothink      h_pv3     3.7s  39 tok
+  ✓ gemma4:e2b+931177-nothink      h_pv4     8.2s  108 tok
+  ✓ gemma4:e2b+931177-nothink      h_pv5     3.5s  34 tok
+Triage decisions to collect: 29 (prompt 29ec04)
+  ⇄ h_qf1  local  private=False  3.7s
+  ⇄ h_qf2  local  private=False  3.6s
+  ⇄ h_qf3  local  private=False  3.6s
+  ⇄ h_qf4  local  private=False  3.6s
+  ⇄ h_cs1  cloud  private=False  3.4s
+  ⇄ h_cs2  cloud  private=False  3.8s
+  ⇄ h_cs3  cloud  private=False  3.7s
+  ⇄ h_cs4  cloud  private=False  3.9s
+  ⇄ h_cc1  cloud  private=False  3.8s
+  ⇄ h_cc2  cloud  private=False  3.8s
+  ⇄ h_cc3  cloud  private=False  4.1s
+  ⇄ h_ex1  cloud  private=False  3.6s
+  ⇄ h_ex2  cloud  private=False  3.7s
+  ⇄ h_ex3  cloud  private=False  3.9s
+  ⇄ h_rs1  local  private=False  4.3s
+  ⇄ h_rs2  local  private=False  4.2s
+  ⇄ h_rs3  local  private=False  4.3s
+  ⇄ h_em1  local  private=False  4.0s
+  ⇄ h_em2  local  private=False  4.0s
+  ⇄ h_em3  local  private=False  3.9s
+  ⇄ h_em4  local  private=False  4.2s
+  ⇄ h_re1  local  private=False  4.0s
+  ⇄ h_re2  cloud  private=False  4.2s
+  ⇄ h_re3  cloud  private=False  4.1s
+  ⇄ h_pv1  cloud  private=False  4.2s
+  ⇄ h_pv2  cloud  private=False  4.3s
+  ⇄ h_pv3  cloud  private=False  3.9s
+  ⇄ h_pv4  cloud  private=False  4.3s
+  ⇄ h_pv5  cloud  private=False  4.5s
+Judgments to collect: 109
+  ⚖ qf01   gemma4:e2b+931177-nothink  9  vs claude-opus-5-5  8
+  ⚖ qf06   gemma4:e2b+931177-nothink  6  vs claude-opus-5-5 10
+  ⚖ qf04   gemma4:e2b+931177-nothink  8  vs claude-opus-5-5  9
+  ⚖ qf05   gemma4:e2b+931177-nothink  9  vs claude-opus-5-5  7
+  ⚖ qf03   gemma4:e2b+931177-nothink  9  vs claude-opus-5-5  7
+  ⚖ qf08   gemma4:e2b+931177-nothink  8  vs claude-opus-5-5  9
+  ⚖ qf07   gemma4:e2b+931177-nothink  7  vs claude-opus-5-5  9
+  ⚖ qf02   gemma4:e2b+931177-nothink  8  vs claude-opus-5-5  8
+  ⚖ cs02   gemma4:e2b+931177-nothink  7  vs claude-opus-5-5  9
+  ⚖ cs03   gemma4:e2b+931177-nothink  6  vs claude-opus-5-5 10
+  ⚖ qf09   gemma4:e2b+931177-nothink  8  vs claude-opus-5-5  8
+  ⚖ cs04   gemma4:e2b+931177-nothink  4  vs claude-opus-5-5 10
+  ⚖ cs05   gemma4:e2b+931177-nothink  8  vs claude-opus-5-5  8
+  ⚖ qf10   gemma4:e2b+931177-nothink  7  vs claude-opus-5-5  9
+  ⚖ cs01   gemma4:e2b+931177-nothink  5  vs claude-opus-5-5  9
+  ⚖ cs10   gemma4:e2b+931177-nothink  2  vs claude-opus-5-5 10
+  ⚖ cs09   gemma4:e2b+931177-nothink  7  vs claude-opus-5-5  9
+  ⚖ cs06   gemma4:e2b+931177-nothink  5  vs claude-opus-5-5  9
+  ⚖ cs08   gemma4:e2b+931177-nothink  9  vs claude-opus-5-5  8
+  ⚖ cs07   gemma4:e2b+931177-nothink  7  vs claude-opus-5-5  9
+  ⚖ cc01   gemma4:e2b+931177-nothink  3  vs claude-opus-5-5  9
+  ⚖ cc04   gemma4:e2b+931177-nothink  3  vs claude-opus-5-5  9
+  ⚖ cc07   gemma4:e2b+931177-nothink  3  vs claude-opus-5-5  9
+  ⚖ cc03   gemma4:e2b+931177-nothink  3  vs claude-opus-5-5  9
+  ⚖ cc05   gemma4:e2b+931177-nothink  2  vs claude-opus-5-5  9
+  ⚖ cc02   gemma4:e2b+931177-nothink  4  vs claude-opus-5-5  9
+  ⚖ cc06   gemma4:e2b+931177-nothink  3  vs claude-opus-5-5  9
+  ⚖ cc08   gemma4:e2b+931177-nothink  3  vs claude-opus-5-5  9
+  ⚖ cc09   gemma4:e2b+931177-nothink  2  vs claude-opus-5-5 10
+  ⚖ ex01   gemma4:e2b+931177-nothink  4  vs claude-opus-5-5  9
+  ⚖ ex03   gemma4:e2b+931177-nothink  6  vs claude-opus-5-5  9
+  ⚖ cc10   gemma4:e2b+931177-nothink  2  vs claude-opus-5-5  9
+  ⚖ ex05   gemma4:e2b+931177-nothink  6  vs claude-opus-5-5  9
+  ⚖ ex04   gemma4:e2b+931177-nothink  2  vs claude-opus-5-5  9
+  ⚖ ex02   gemma4:e2b+931177-nothink  5  vs claude-opus-5-5  9
+  ⚖ ex06   gemma4:e2b+931177-nothink  5  vs claude-opus-5-5 10
+  ⚖ ex07   gemma4:e2b+931177-nothink  4  vs claude-opus-5-5  9
+  ⚖ rs01   gemma4:e2b+931177-nothink  7  vs claude-opus-5-5  9
+  ⚖ ex08   gemma4:e2b+931177-nothink  6  vs claude-opus-5-5  9
+  ⚖ rs04   gemma4:e2b+931177-nothink 10  vs claude-opus-5-5 10
+  ⚖ rs03   gemma4:e2b+931177-nothink  4  vs claude-opus-5-5  8
+  ⚖ rs07   gemma4:e2b+931177-nothink  6  vs claude-opus-5-5  9
+  ⚖ rs02   gemma4:e2b+931177-nothink  5  vs claude-opus-5-5  8
+  ⚖ rs06   gemma4:e2b+931177-nothink  3  vs claude-opus-5-5  8
+  ⚖ em01   gemma4:e2b+931177-nothink  9  vs claude-opus-5-5  9
+  ⚖ rs08   gemma4:e2b+931177-nothink  4  vs claude-opus-5-5  9
+  ⚖ rs05   gemma4:e2b+931177-nothink  9  vs claude-opus-5-5  8
+  ⚖ em02   gemma4:e2b+931177-nothink 10  vs claude-opus-5-5 10
+  ⚖ em03   gemma4:e2b+931177-nothink  6  vs claude-opus-5-5  9
+  ⚖ em06   gemma4:e2b+931177-nothink 10  vs claude-opus-5-5 10
+  ⚖ em04   gemma4:e2b+931177-nothink  5  vs claude-opus-5-5  8
+  ⚖ em05   gemma4:e2b+931177-nothink  6  vs claude-opus-5-5  9
+  ⚖ em08   gemma4:e2b+931177-nothink  9  vs claude-opus-5-5  8
+  ⚖ em07   gemma4:e2b+931177-nothink  8  vs claude-opus-5-5  9
+  ⚖ em09   gemma4:e2b+931177-nothink  5  vs claude-opus-5-5  9
+  ⚖ em10   gemma4:e2b+931177-nothink  9  vs claude-opus-5-5  9
+  ⚖ re02   gemma4:e2b+931177-nothink  8  vs claude-opus-5-5  9
+  ⚖ re01   gemma4:e2b+931177-nothink  7  vs claude-opus-5-5 10
+  ⚖ re03   gemma4:e2b+931177-nothink  4  vs claude-opus-5-5 10
+  ⚖ re07   gemma4:e2b+931177-nothink  1  vs claude-opus-5-5 10
+  ⚖ re04   gemma4:e2b+931177-nothink  3  vs claude-opus-5-5 10
+  ⚖ re05   gemma4:e2b+931177-nothink  1  vs claude-opus-5-5  9
+  ⚖ re08   gemma4:e2b+931177-nothink  1  vs claude-opus-5-5  9
+  ⚖ re06   gemma4:e2b+931177-nothink  2  vs claude-opus-5-5  9
+  ⚖ pv04   gemma4:e2b+931177-nothink  3  vs claude-opus-5-5  9
+  ⚖ pv02   gemma4:e2b+931177-nothink  8  vs claude-opus-5-5  9
+  ⚖ pv03   gemma4:e2b+931177-nothink  4  vs claude-opus-5-5  9
+  ⚖ pv02   gemma4:e2b+931177-nothink  8  vs claude-opus-5-5+redacted  9
+  ⚖ pv01   gemma4:e2b+931177-nothink  4  vs claude-opus-5-5  8
+  ⚖ pv01   gemma4:e2b+931177-nothink  4  vs claude-opus-5-5+redacted  8
+  ⚖ pv06   gemma4:e2b+931177-nothink  3  vs claude-opus-5-5  9
+  ⚖ pv06   gemma4:e2b+931177-nothink  4  vs claude-opus-5-5+redacted  8
+  ⚖ pv07   gemma4:e2b+931177-nothink  9  vs claude-opus-5-5  6
+  ⚖ pv08   gemma4:e2b+931177-nothink  3  vs claude-opus-5-5  9
+  ⚖ pv05   gemma4:e2b+931177-nothink  3  vs claude-opus-5-5  5
+  ⚖ pv09   gemma4:e2b+931177-nothink  2  vs claude-opus-5-5  9
+  ⚖ pv08   gemma4:e2b+931177-nothink  6  vs claude-opus-5-5+redacted  5
+  ⚖ h_qf2  gemma4:e2b+931177-nothink  7  vs claude-opus-5-5  9
+  ⚖ h_qf1  gemma4:e2b+931177-nothink  8  vs claude-opus-5-5  9
+  ⚖ pv10   gemma4:e2b+931177-nothink  4  vs claude-opus-5-5  8
+  ⚖ h_qf4  gemma4:e2b+931177-nothink  9  vs claude-opus-5-5  9
+  ⚖ h_qf3  gemma4:e2b+931177-nothink  9  vs claude-opus-5-5  8
+  ⚖ h_cs1  gemma4:e2b+931177-nothink  7  vs claude-opus-5-5  9
+  ⚖ h_cs4  gemma4:e2b+931177-nothink  2  vs claude-opus-5-5  9
+  ⚖ h_cs2  gemma4:e2b+931177-nothink  6  vs claude-opus-5-5  9
+  ⚖ h_cs3  gemma4:e2b+931177-nothink  8  vs claude-opus-5-5  9
+  ⚖ h_cc2  gemma4:e2b+931177-nothink  4  vs claude-opus-5-5  9
+  ⚖ h_cc1  gemma4:e2b+931177-nothink  6  vs claude-opus-5-5  9
+  ⚖ h_ex2  gemma4:e2b+931177-nothink  5  vs claude-opus-5-5  9
+  ⚖ h_cc3  gemma4:e2b+931177-nothink  1  vs claude-opus-5-5 10
+  ⚖ h_ex1  gemma4:e2b+931177-nothink  4  vs claude-opus-5-5  9
+  ⚖ h_rs1  gemma4:e2b+931177-nothink  6  vs claude-opus-5-5  9
+  ⚖ h_ex3  gemma4:e2b+931177-nothink  8  vs claude-opus-5-5  9
+  ⚖ h_em1  gemma4:e2b+931177-nothink  9  vs claude-opus-5-5  9
+  ⚖ h_rs3  gemma4:e2b+931177-nothink  7  vs claude-opus-5-5  9
+  ⚖ h_em2  gemma4:e2b+931177-nothink 10  vs claude-opus-5-5 10
+  ⚖ h_rs2  gemma4:e2b+931177-nothink  8  vs claude-opus-5-5  9
+  ⚖ h_em3  gemma4:e2b+931177-nothink  8  vs claude-opus-5-5  9
+  ⚖ h_em4  gemma4:e2b+931177-nothink  8  vs claude-opus-5-5  9
+  ⚖ h_re2  gemma4:e2b+931177-nothink  2  vs claude-opus-5-5  9
+  ⚖ h_re3  gemma4:e2b+931177-nothink  1  vs claude-opus-5-5  9
+  ⚖ h_re1  gemma4:e2b+931177-nothink  1  vs claude-opus-5-5  9
+  ⚖ h_pv1  gemma4:e2b+931177-nothink  2  vs claude-opus-5-5  9
+  ⚖ h_pv2  gemma4:e2b+931177-nothink  5  vs claude-opus-5-5  9
+  ⚖ h_pv1  gemma4:e2b+931177-nothink  2  vs claude-opus-5-5+redacted  9
+  ⚖ h_pv3  gemma4:e2b+931177-nothink  3  vs claude-opus-5-5  9
+  ⚖ h_pv4  gemma4:e2b+931177-nothink  2  vs claude-opus-5-5+redacted  9
+  ⚖ h_pv5  gemma4:e2b+931177-nothink  3  vs claude-opus-5-5  9
+  ⚖ h_pv4  gemma4:e2b+931177-nothink  1  vs claude-opus-5-5  8
+
+Report: D:\Projects\Python\Quantum\dual_ai\bench\reports\desktop-8d7jjfd.md

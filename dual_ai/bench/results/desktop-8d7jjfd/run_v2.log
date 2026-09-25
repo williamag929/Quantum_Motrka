@@ -1,0 +1,368 @@
+Answers to collect: 103 gemma4:e2b+931177, 29 claude-opus-5-5, 6 claude-opus-5-5+redacted, 0 moonshotai/kimi-k3
+  ✓ claude-opus-5-5                h_qf4     3.7s  280 tok
+  ✓ claude-opus-5-5                h_qf3     4.3s  307 tok
+  ✓ claude-opus-5-5                h_qf1     4.8s  367 tok
+  ✓ claude-opus-5-5                h_cs1     6.2s  634 tok
+  ✓ claude-opus-5-5                h_cs2     7.6s  852 tok
+  ✓ claude-opus-5-5                h_qf2     8.0s  764 tok
+  ✓ claude-opus-5-5                h_cs4     9.8s  983 tok
+  ✓ claude-opus-5-5                h_cs3    13.8s  1552 tok
+  ✓ gemma4:e2b+931177              qf01     15.8s  214 tok
+  ✓ claude-opus-5-5                h_rs1     5.3s  381 tok
+  ✓ claude-opus-5-5                h_rs2     2.1s  143 tok
+  ✓ claude-opus-5-5                h_rs3     1.4s  78 tok
+  ✓ claude-opus-5-5                h_em1     1.4s  48 tok
+  ✓ claude-opus-5-5                h_ex1    17.2s  1639 tok
+  ✓ claude-opus-5-5                h_ex3    11.5s  1139 tok
+  ✓ claude-opus-5-5                h_ex2    17.5s  1869 tok
+  ✓ claude-opus-5-5                h_em2     2.1s  5 tok
+  ✓ claude-opus-5-5                h_em3     1.4s  49 tok
+  ✓ claude-opus-5-5                h_em4     1.7s  92 tok
+  ✓ claude-opus-5-5                h_re2     3.6s  317 tok
+  ✓ claude-opus-5-5                h_re1     5.8s  533 tok
+  ✓ claude-opus-5-5                h_pv1     8.7s  814 tok
+  ✓ claude-opus-5-5                h_cc1    34.2s  4625 tok
+  ✓ claude-opus-5-5                h_re3    12.8s  1183 tok
+  ✓ claude-opus-5-5                h_pv2    10.9s  975 tok
+  ✓ claude-opus-5-5                h_pv3    13.9s  1143 tok
+  ✓ gemma4:e2b+931177              qf02     32.3s  443 tok
+  ✓ claude-opus-5-5+redacted       pv02      7.6s  729 tok
+  ✓ claude-opus-5-5                h_cc3    43.1s  5581 tok
+  ✓ claude-opus-5-5+redacted       pv01     11.8s  1108 tok
+  ✓ claude-opus-5-5                h_pv4    15.4s  1627 tok
+  ✓ claude-opus-5-5+redacted       pv08      5.0s  411 tok
+  ✓ claude-opus-5-5+redacted       pv06     10.0s  943 tok
+  ✓ claude-opus-5-5                h_pv5    20.4s  1953 tok
+  ✓ claude-opus-5-5+redacted       h_pv1    11.0s  1070 tok
+  ✓ gemma4:e2b+931177              qf03     14.7s  206 tok
+  ✓ claude-opus-5-5+redacted       h_pv4    15.6s  1648 tok
+  ✓ claude-opus-5-5                h_cc2    69.5s  7987 tok
+  ✓ gemma4:e2b+931177              qf04     15.2s  212 tok
+  ✓ gemma4:e2b+931177              qf05     22.4s  319 tok
+  ✓ gemma4:e2b+931177              qf06     15.6s  216 tok
+  ✓ gemma4:e2b+931177              qf07     12.4s  175 tok
+  ✓ gemma4:e2b+931177              qf08     19.3s  197 tok
+  ✓ gemma4:e2b+931177              qf09     12.9s  177 tok
+  ✓ gemma4:e2b+931177              qf10     24.5s  340 tok
+  ✓ gemma4:e2b+931177              cs01     42.7s  621 tok
+  ✓ gemma4:e2b+931177              cs02     25.7s  361 tok
+  ✓ gemma4:e2b+931177              cs03     27.6s  419 tok
+  ✓ gemma4:e2b+931177              cs04     34.8s  528 tok
+  ✓ gemma4:e2b+931177              cs05     16.8s  250 tok
+  ✓ gemma4:e2b+931177              cs06     30.6s  464 tok
+  ✓ gemma4:e2b+931177              cs07     31.2s  477 tok
+  ✓ gemma4:e2b+931177              cs08     19.8s  289 tok
+  ✓ gemma4:e2b+931177              cs09     21.4s  319 tok
+  ✓ gemma4:e2b+931177              cs10     22.7s  341 tok
+  ✓ gemma4:e2b+931177              cc01    102.1s  1558 tok
+  ✓ gemma4:e2b+931177              cc02     51.5s  766 tok
+  ✓ gemma4:e2b+931177              cc03     70.4s  1005 tok
+  ✓ gemma4:e2b+931177              cc04    118.2s  1755 tok
+  ✓ gemma4:e2b+931177              cc05    109.5s  1667 tok
+  ✓ gemma4:e2b+931177              cc06     98.9s  1492 tok
+  ✓ gemma4:e2b+931177              cc07     33.4s  518 tok
+  ✓ gemma4:e2b+931177              cc08    120.6s  1842 tok
+  ✓ gemma4:e2b+931177              cc09     52.7s  809 tok
+  ✓ gemma4:e2b+931177              cc10    129.4s  1972 tok
+  ✓ gemma4:e2b+931177              ex01     23.2s  356 tok
+  ✓ gemma4:e2b+931177              ex02     24.9s  383 tok
+  ✓ gemma4:e2b+931177              ex03     29.9s  463 tok
+  ✓ gemma4:e2b+931177              ex04     16.4s  245 tok
+  ✓ gemma4:e2b+931177              ex05     41.0s  636 tok
+  ✓ gemma4:e2b+931177              ex06     19.9s  305 tok
+  ✓ gemma4:e2b+931177              ex07     31.4s  479 tok
+  ✓ gemma4:e2b+931177              ex08     31.1s  480 tok
+  ✓ gemma4:e2b+931177              rs01     26.5s  395 tok
+  ✓ gemma4:e2b+931177              rs02     25.5s  392 tok
+  ✓ gemma4:e2b+931177              rs03     18.2s  272 tok
+  ✓ gemma4:e2b+931177              rs04     22.2s  328 tok
+  ✓ gemma4:e2b+931177              rs05     21.1s  302 tok
+  ✓ gemma4:e2b+931177              rs06     17.9s  255 tok
+  ✓ gemma4:e2b+931177              rs07     21.8s  308 tok
+  ✓ gemma4:e2b+931177              rs08     29.8s  411 tok
+  ✓ gemma4:e2b+931177              em01      2.1s  2 tok
+  ✓ gemma4:e2b+931177              em02      1.9s  2 tok
+  ✓ gemma4:e2b+931177              em03     18.0s  242 tok
+  ✓ gemma4:e2b+931177              em04     22.5s  298 tok
+  ✓ gemma4:e2b+931177              em05     28.6s  386 tok
+  ✓ gemma4:e2b+931177              em06     19.8s  267 tok
+  ✓ gemma4:e2b+931177              em07     23.5s  332 tok
+  ✓ gemma4:e2b+931177              em08     24.0s  363 tok
+  ✓ gemma4:e2b+931177              em09     39.1s  603 tok
+  ✓ gemma4:e2b+931177              em10      1.7s  3 tok
+  ✓ gemma4:e2b+931177              re01     29.7s  462 tok
+  ✓ gemma4:e2b+931177              re02     80.0s  1251 tok
+  ✓ gemma4:e2b+931177              re03     37.2s  586 tok
+  ✓ gemma4:e2b+931177              re04     33.2s  516 tok
+  ✓ gemma4:e2b+931177              re05     51.5s  804 tok
+  ✓ gemma4:e2b+931177              re06     39.7s  621 tok
+  ✓ gemma4:e2b+931177              re07     19.7s  298 tok
+  ✓ gemma4:e2b+931177              re08     36.4s  562 tok
+  ✓ gemma4:e2b+931177              pv01     32.7s  507 tok
+  ✓ gemma4:e2b+931177              pv02     35.1s  538 tok
+  ✓ gemma4:e2b+931177              pv03     27.9s  426 tok
+  ✓ gemma4:e2b+931177              pv04     21.6s  328 tok
+  ✓ gemma4:e2b+931177              pv05     32.7s  501 tok
+  ✓ gemma4:e2b+931177              pv06     24.8s  380 tok
+  ✓ gemma4:e2b+931177              pv07     22.6s  342 tok
+  ✓ gemma4:e2b+931177              pv08     21.3s  323 tok
+  ✓ gemma4:e2b+931177              pv09     31.7s  485 tok
+  ✓ gemma4:e2b+931177              pv10     27.3s  412 tok
+  ✓ gemma4:e2b+931177              h_qf1    19.5s  301 tok
+  ✓ gemma4:e2b+931177              h_qf2    17.6s  270 tok
+  ✓ gemma4:e2b+931177              h_qf3    18.2s  279 tok
+  ✓ gemma4:e2b+931177              h_qf4    12.3s  183 tok
+  ✓ gemma4:e2b+931177              h_cs1    37.8s  593 tok
+  ✓ gemma4:e2b+931177              h_cs2    29.6s  453 tok
+  ✓ gemma4:e2b+931177              h_cs3    24.2s  376 tok
+  ✓ gemma4:e2b+931177              h_cs4    36.8s  573 tok
+  ✓ gemma4:e2b+931177              h_cc1    79.8s  1225 tok
+  ✓ gemma4:e2b+931177              h_cc2    59.0s  910 tok
+  ✓ gemma4:e2b+931177              h_cc3   129.8s  1988 tok
+  ✓ gemma4:e2b+931177              h_ex1    24.3s  372 tok
+  ✓ gemma4:e2b+931177              h_ex2    26.6s  401 tok
+  ✓ gemma4:e2b+931177              h_ex3    19.8s  298 tok
+  ✓ gemma4:e2b+931177              h_rs1    24.2s  371 tok
+  ✓ gemma4:e2b+931177              h_rs2    23.4s  334 tok
+  ✓ gemma4:e2b+931177              h_rs3    21.9s  313 tok
+  ✓ gemma4:e2b+931177              h_em1     1.7s  4 tok
+  ✓ gemma4:e2b+931177              h_em2     1.9s  5 tok
+  ✓ gemma4:e2b+931177              h_em3    15.0s  211 tok
+  ✓ gemma4:e2b+931177              h_em4    19.4s  278 tok
+  ✓ gemma4:e2b+931177              h_re1    20.0s  295 tok
+  ✓ gemma4:e2b+931177              h_re2    24.2s  363 tok
+  ✓ gemma4:e2b+931177              h_re3    46.4s  728 tok
+  ✓ gemma4:e2b+931177              h_pv1    36.3s  555 tok
+  ✓ gemma4:e2b+931177              h_pv2    27.4s  412 tok
+  ✓ gemma4:e2b+931177              h_pv3    18.6s  279 tok
+  ✓ gemma4:e2b+931177              h_pv4    26.9s  400 tok
+  ✓ gemma4:e2b+931177              h_pv5    39.2s  596 tok
+Triage decisions to collect: 103 (prompt 328563)
+  ⇄ qf01   local  private=False  4.2s
+  ⇄ qf02   local  private=False  4.5s
+  ⇄ qf03   local  private=False  4.5s
+  ⇄ qf04   local  private=False  4.7s
+  ⇄ qf05   local  private=False  4.6s
+  ⇄ qf06   local  private=False  4.3s
+  ⇄ qf07   local  private=False  4.1s
+  ⇄ qf08   local  private=False  4.2s
+  ⇄ qf09   local  private=False  4.2s
+  ⇄ qf10   local  private=False  4.3s
+  ⇄ cs01   local  private=False  4.6s
+  ⇄ cs02   local  private=False  4.4s
+  ⇄ cs03   local  private=False  4.2s
+  ⇄ cs04   local  private=False  4.4s
+  ⇄ cs05   local  private=False  4.2s
+  ⇄ cs06   local  private=False  4.4s
+  ⇄ cs07   local  private=False  4.5s
+  ⇄ cs08   local  private=False  4.4s
+  ⇄ cs09   local  private=False  4.2s
+  ⇄ cs10   local  private=False  4.2s
+  ⇄ cc01   cloud  private=False  4.3s
+  ⇄ cc02   cloud  private=False  5.3s
+  ⇄ cc03   cloud  private=False  4.6s
+  ⇄ cc04   cloud  private=False  4.6s
+  ⇄ cc05   cloud  private=False  4.5s
+  ⇄ cc06   cloud  private=False  5.7s
+  ⇄ cc07   cloud  private=False  4.6s
+  ⇄ cc08   cloud  private=False  4.4s
+  ⇄ cc09   local  private=False  5.1s
+  ⇄ cc10   cloud  private=False  4.4s
+  ⇄ ex01   local  private=False  4.2s
+  ⇄ ex02   cloud  private=False  4.3s
+  ⇄ ex03   local  private=False  4.3s
+  ⇄ ex04   cloud  private=False  4.4s
+  ⇄ ex05   local  private=False  4.4s
+  ⇄ ex06   cloud  private=False  4.3s
+  ⇄ ex07   cloud  private=False  4.3s
+  ⇄ ex08   local  private=False  4.2s
+  ⇄ rs01   local  private=False  5.1s
+  ⇄ rs02   local  private=False  4.5s
+  ⇄ rs03   local  private=False  4.5s
+  ⇄ rs04   local  private=False  4.5s
+  ⇄ rs05   local  private=False  5.1s
+  ⇄ rs06   local  private=False  4.9s
+  ⇄ rs07   local  private=False  5.3s
+  ⇄ rs08   local  private=False  4.6s
+  ⇄ em01   local  private=False  4.8s
+  ⇄ em02   local  private=False  4.7s
+  ⇄ em03   local  private=False  4.5s
+  ⇄ em04   local  private=False  4.6s
+  ⇄ em05   local  private=False  4.9s
+  ⇄ em06   local  private=False  4.7s
+  ⇄ em07   local  private=False  4.4s
+  ⇄ em08   local  private=False  4.6s
+  ⇄ em09   cloud  private=False  4.7s
+  ⇄ em10   local  private=False  4.5s
+  ⇄ re01   local  private=False  4.4s
+  ⇄ re02   local  private=False  4.5s
+  ⇄ re03   local  private=False  4.6s
+  ⇄ re04   cloud  private=False  4.5s
+  ⇄ re05   cloud  private=False  4.6s
+  ⇄ re06   cloud  private=False  4.6s
+  ⇄ re07   local  private=False  4.5s
+  ⇄ re08   local  private=False  4.7s
+  ⇄ pv01   local  private=False  4.5s
+  ⇄ pv02   local  private=False  4.5s
+  ⇄ pv03   cloud  private=False  4.6s
+  ⇄ pv04   local  private=False  4.4s
+  ⇄ pv05   cloud  private=True   4.7s
+  ⇄ pv06   local  private=False  4.4s
+  ⇄ pv07   local  private=False  4.6s
+  ⇄ pv08   local  private=False  4.3s
+  ⇄ pv09   cloud  private=False  4.8s
+  ⇄ pv10   local  private=False  4.8s
+  ⇄ h_qf1  local  private=False  4.5s
+  ⇄ h_qf2  local  private=False  4.3s
+  ⇄ h_qf3  local  private=False  4.2s
+  ⇄ h_qf4  local  private=False  4.3s
+  ⇄ h_cs1  local  private=False  4.2s
+  ⇄ h_cs2  local  private=False  4.3s
+  ⇄ h_cs3  local  private=False  4.2s
+  ⇄ h_cs4  cloud  private=False  4.4s
+  ⇄ h_cc1  cloud  private=False  4.5s
+  ⇄ h_cc2  cloud  private=False  4.6s
+  ⇄ h_cc3  cloud  private=False  4.5s
+  ⇄ h_ex1  local  private=False  4.2s
+  ⇄ h_ex2  cloud  private=False  4.4s
+  ⇄ h_ex3  local  private=False  4.2s
+  ⇄ h_rs1  local  private=False  4.4s
+  ⇄ h_rs2  local  private=False  4.5s
+  ⇄ h_rs3  local  private=False  4.6s
+  ⇄ h_em1  local  private=False  4.6s
+  ⇄ h_em2  local  private=False  4.5s
+  ⇄ h_em3  local  private=False  4.3s
+  ⇄ h_em4  local  private=False  4.6s
+  ⇄ h_re1  local  private=False  4.6s
+  ⇄ h_re2  local  private=False  4.5s
+  ⇄ h_re3  cloud  private=False  4.5s
+  ⇄ h_pv1  local  private=False  4.7s
+  ⇄ h_pv2  cloud  private=False  4.6s
+  ⇄ h_pv3  cloud  private=False  4.5s
+  ⇄ h_pv4  local  private=False  4.7s
+  ⇄ h_pv5  cloud  private=False  4.5s
+Judgments to collect: 109
+  ⚖ qf01   gemma4:e2b+931177  9  vs claude-opus-5-5  9
+  ⚖ qf04   gemma4:e2b+931177  8  vs claude-opus-5-5  9
+  ⚖ qf06   gemma4:e2b+931177  6  vs claude-opus-5-5 10
+  ⚖ qf03   gemma4:e2b+931177  9  vs claude-opus-5-5  7
+  ⚖ qf07   gemma4:e2b+931177  8  vs claude-opus-5-5  9
+  ⚖ qf05   gemma4:e2b+931177  9  vs claude-opus-5-5  7
+  ⚖ qf09   gemma4:e2b+931177  8  vs claude-opus-5-5  8
+  ⚖ qf08   gemma4:e2b+931177  9  vs claude-opus-5-5 10
+  ⚖ qf02   gemma4:e2b+931177  4  vs claude-opus-5-5  9
+  ⚖ qf10   gemma4:e2b+931177  7  vs claude-opus-5-5  9
+  ⚖ cs04   gemma4:e2b+931177  8  vs claude-opus-5-5  9
+  ⚖ cs03   gemma4:e2b+931177  8  vs claude-opus-5-5  9
+  ⚖ cs01   gemma4:e2b+931177  5  vs claude-opus-5-5  9
+  ⚖ cs02   gemma4:e2b+931177  8  vs claude-opus-5-5  8
+  ⚖ cs06   gemma4:e2b+931177  7  vs claude-opus-5-5  9
+  ⚖ cs05   gemma4:e2b+931177  8  vs claude-opus-5-5  9
+  ⚖ cs10   gemma4:e2b+931177  1  vs claude-opus-5-5 10
+  ⚖ cs08   gemma4:e2b+931177  9  vs claude-opus-5-5  8
+  ⚖ cs07   gemma4:e2b+931177  7  vs claude-opus-5-5  9
+  ⚖ cs09   gemma4:e2b+931177  7  vs claude-opus-5-5  9
+  ⚖ cc04   gemma4:e2b+931177  2  vs claude-opus-5-5  9
+  ⚖ cc03   gemma4:e2b+931177  3  vs claude-opus-5-5  9
+  ⚖ cc01   gemma4:e2b+931177  7  vs claude-opus-5-5  9
+  ⚖ cc02   gemma4:e2b+931177  3  vs claude-opus-5-5  9
+  ⚖ cc06   gemma4:e2b+931177  5  vs claude-opus-5-5 10
+  ⚖ cc05   gemma4:e2b+931177  3  vs claude-opus-5-5  9
+  ⚖ cc09   gemma4:e2b+931177  2  vs claude-opus-5-5 10
+  ⚖ ex01   gemma4:e2b+931177  4  vs claude-opus-5-5  9
+  ⚖ cc08   gemma4:e2b+931177  2  vs claude-opus-5-5  9
+  ⚖ cc07   gemma4:e2b+931177  3  vs claude-opus-5-5  9
+  ⚖ ex03   gemma4:e2b+931177  6  vs claude-opus-5-5 10
+  ⚖ ex02   gemma4:e2b+931177  5  vs claude-opus-5-5  9
+  ⚖ ex07   gemma4:e2b+931177  4  vs claude-opus-5-5  9
+  ⚖ ex05   gemma4:e2b+931177  7  vs claude-opus-5-5 10
+  ⚖ ex08   gemma4:e2b+931177  6  vs claude-opus-5-5  9
+  ⚖ cc10   gemma4:e2b+931177  2  vs claude-opus-5-5 10
+  ⚖ ex04   gemma4:e2b+931177  4  vs claude-opus-5-5  9
+  ⚖ ex06   gemma4:e2b+931177  6  vs claude-opus-5-5 10
+  ⚖ rs01   gemma4:e2b+931177  8  vs claude-opus-5-5  9
+  ⚖ rs04   gemma4:e2b+931177  9  vs claude-opus-5-5  9
+  ⚖ rs06   gemma4:e2b+931177  4  vs claude-opus-5-5  8
+  ⚖ rs03   gemma4:e2b+931177  4  vs claude-opus-5-5  9
+  ⚖ rs05   gemma4:e2b+931177  8  vs claude-opus-5-5  8
+  ⚖ rs02   gemma4:e2b+931177  7  vs claude-opus-5-5  8
+  ⚖ rs07   gemma4:e2b+931177  8  vs claude-opus-5-5  9
+  ⚖ rs08   gemma4:e2b+931177  4  vs claude-opus-5-5  9
+  ⚖ em02   gemma4:e2b+931177 10  vs claude-opus-5-5 10
+  ⚖ em01   gemma4:e2b+931177 10  vs claude-opus-5-5 10
+  ⚖ em06   gemma4:e2b+931177 10  vs claude-opus-5-5 10
+  ⚖ em05   gemma4:e2b+931177  6  vs claude-opus-5-5  9
+  ⚖ em04   gemma4:e2b+931177  7  vs claude-opus-5-5  8
+  ⚖ em03   gemma4:e2b+931177  5  vs claude-opus-5-5  9
+  ⚖ em08   gemma4:e2b+931177  8  vs claude-opus-5-5  8
+  ⚖ em10   gemma4:e2b+931177  9  vs claude-opus-5-5  9
+  ⚖ re01   gemma4:e2b+931177  8  vs claude-opus-5-5 10
+  ⚖ em07   gemma4:e2b+931177  7  vs claude-opus-5-5  9
+  ⚖ em09   gemma4:e2b+931177  5  vs claude-opus-5-5  9
+  ⚖ re03   gemma4:e2b+931177  9  vs claude-opus-5-5  9
+  ⚖ re02   gemma4:e2b+931177  8  vs claude-opus-5-5  9
+  ⚖ re07   gemma4:e2b+931177  8  vs claude-opus-5-5  9
+  ⚖ re04   gemma4:e2b+931177  8  vs claude-opus-5-5  9
+  ⚖ re08   gemma4:e2b+931177  8  vs claude-opus-5-5  9
+  ⚖ pv01   gemma4:e2b+931177  4  vs claude-opus-5-5  9
+  ⚖ re05   gemma4:e2b+931177  6  vs claude-opus-5-5  9
+  ⚖ re06   gemma4:e2b+931177  2  vs claude-opus-5-5  8
+  ⚖ pv02   gemma4:e2b+931177  4  vs claude-opus-5-5  9
+  ⚖ pv04   gemma4:e2b+931177  4  vs claude-opus-5-5  9
+  ⚖ pv03   gemma4:e2b+931177  2  vs claude-opus-5-5  9
+  ⚖ pv01   gemma4:e2b+931177  4  vs claude-opus-5-5+redacted  8
+  ⚖ pv02   gemma4:e2b+931177  4  vs claude-opus-5-5+redacted  9
+  ⚖ pv06   gemma4:e2b+931177  3  vs claude-opus-5-5  9
+  ⚖ pv06   gemma4:e2b+931177  4  vs claude-opus-5-5+redacted  8
+  ⚖ pv08   gemma4:e2b+931177  5  vs claude-opus-5-5  9
+  ⚖ pv07   gemma4:e2b+931177  6  vs claude-opus-5-5  8
+  ⚖ pv09   gemma4:e2b+931177  4  vs claude-opus-5-5  9
+  ⚖ pv05   gemma4:e2b+931177  5  vs claude-opus-5-5  8
+  ⚖ pv08   gemma4:e2b+931177  6  vs claude-opus-5-5+redacted  4
+  ⚖ h_qf1  gemma4:e2b+931177  8  vs claude-opus-5-5  9
+  ⚖ h_qf2  gemma4:e2b+931177  8  vs claude-opus-5-5  9
+  ⚖ pv10   gemma4:e2b+931177  8  vs claude-opus-5-5  5
+  ⚖ h_qf4  gemma4:e2b+931177  9  vs claude-opus-5-5  8
+  ⚖ h_qf3  gemma4:e2b+931177  8  vs claude-opus-5-5  9
+  ⚖ h_cs1  gemma4:e2b+931177  7  vs claude-opus-5-5  9
+  ⚖ h_cs2  gemma4:e2b+931177  7  vs claude-opus-5-5  9
+  ⚖ h_cs3  gemma4:e2b+931177  8  vs claude-opus-5-5  9
+  ⚖ h_cs4  gemma4:e2b+931177  6  vs claude-opus-5-5  9
+  ⚖ h_cc2  gemma4:e2b+931177  4  vs claude-opus-5-5  9
+  ⚖ h_cc1  gemma4:e2b+931177  7  vs claude-opus-5-5  9
+  ⚖ h_ex1  gemma4:e2b+931177  5  vs claude-opus-5-5  9
+  ⚖ h_ex2  gemma4:e2b+931177  6  vs claude-opus-5-5  9
+  ⚖ h_ex3  gemma4:e2b+931177  8  vs claude-opus-5-5  9
+  ⚖ h_cc3  gemma4:e2b+931177  3  vs claude-opus-5-5  9
+  ⚖ h_rs1  gemma4:e2b+931177  6  vs claude-opus-5-5  8
+  ⚖ h_em1  gemma4:e2b+931177  9  vs claude-opus-5-5  9
+  ⚖ h_em2  gemma4:e2b+931177  2  vs claude-opus-5-5 10
+  ⚖ h_em4  gemma4:e2b+931177  8  vs claude-opus-5-5  9
+  ⚖ h_em3  gemma4:e2b+931177  9  vs claude-opus-5-5  9
+  ⚖ h_rs3  gemma4:e2b+931177  8  vs claude-opus-5-5  9
+  ⚖ h_rs2  gemma4:e2b+931177  8  vs claude-opus-5-5  9
+  ⚖ h_re2  gemma4:e2b+931177  7  vs claude-opus-5-5  9
+  ⚖ h_re1  gemma4:e2b+931177  7  vs claude-opus-5-5  9
+  ⚖ h_pv1  gemma4:e2b+931177  2  vs claude-opus-5-5  9
+  ⚖ h_pv3  gemma4:e2b+931177  5  vs claude-opus-5-5  9
+  ⚖ h_pv2  gemma4:e2b+931177  2  vs claude-opus-5-5  9
+  ⚖ h_pv1  gemma4:e2b+931177  2  vs claude-opus-5-5+redacted  8
+  ⚖ h_re3  gemma4:e2b+931177  3  vs claude-opus-5-5  5
+  ⚖ h_pv4  gemma4:e2b+931177  4  vs claude-opus-5-5+redacted  9
+  ⚖ h_pv5  gemma4:e2b+931177  3  vs claude-opus-5-5  9
+  ⚖ h_pv4  gemma4:e2b+931177  4  vs claude-opus-5-5  8
+Traceback (most recent call last):
+  File "D:\Projects\Python\Quantum\dual_ai\bench\run.py", line 280, in <module>
+    local_system = LOCAL_PROMPTS[args.local_prompt]
+    ^^^^^^
+  File "D:\Projects\Python\Quantum\dual_ai\bench\run.py", line 275, in main
+    ap.add_argument("--kimi", action="store_true", help="also collect Kimi answers (slow on the free NVIDIA tier)")
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Projects\Python\Quantum\dual_ai\bench\report.py", line 14, in <module>
+    from bench.run import (
+        CLOUD, CLOUD_REDACTED, PROFILE, ROOT, answer_index, judgment_index, local_is_a, triage_index, triage_version,
+    )
+  File "D:\Projects\Python\Quantum\dual_ai\bench\run.py", line 38, in <module>
+    from config import CLAUDE_MODEL, GEMMA_MODEL, KIMI_MODEL, LOCAL_SYSTEM_PROMPT, LOCAL_THINK, SYSTEM_PROMPT  # noqa: E402
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ImportError: cannot import name 'LOCAL_THINK' from 'config' (D:\Projects\Python\Quantum\dual_ai\config.py). Did you mean: 'LOCAL_HINTS'?
