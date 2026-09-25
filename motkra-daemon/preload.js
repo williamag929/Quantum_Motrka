@@ -42,11 +42,20 @@ contextBridge.exposeInMainWorld('motkra', {
    */
   onRouteInfo: cb => ipcRenderer.on('route-info', (_ev, info) => cb(info)),
 
-  /** Start local Windows STT (spawns stt-win.ps1). */
+  /** Start local speech-to-text (Whisper; Windows speech recognition as fallback). */
   sttStart: () => ipcRenderer.invoke('stt-start'),
 
-  /** Stop local Windows STT (kills the PS process). */
+  /** Stop local speech-to-text. */
   sttStop: () => ipcRenderer.invoke('stt-stop'),
+
+  /**
+   * Speak text with the local Piper voice.
+   * @returns {Promise<boolean>} false when Piper is not available (use speechSynthesis)
+   */
+  ttsSpeak: text => ipcRenderer.invoke('tts-speak', text),
+
+  /** Stop the local voice. */
+  ttsStop: () => ipcRenderer.invoke('tts-stop'),
 
   /**
    * Register a callback that fires for each recognized transcript line.

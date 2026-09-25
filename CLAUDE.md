@@ -20,7 +20,7 @@ Quantum/
 
 ### motkra-daemon (Electron)
 
-`npm start` / `npm test` (node:test). Owns port 7432 (VS Code + browser extensions). On startup `brain.js` spawns `python ../dual_ai/daemon.py --headless` on 7433 (`MOTKRA_PYTHON`, `MOTKRA_BRAIN_PORT` override) and every query goes through `/route`: the brain picks local vs cloud, redacts secrets and drops private turns; Electron streams the reply, restores placeholders, restores them in tool inputs and redacts tool output through `/redact` (fails closed). If the brain is unreachable it falls back to the keyword router, and never sends a conversation already marked private to the cloud. The HTTP server accepts only requests without Origin or from browser extensions.
+`npm start` / `npm test` (node:test). Owns port 7432 (VS Code + browser extensions). On startup `brain.js` spawns `python ../dual_ai/daemon.py --headless` on 7433 (`MOTKRA_PYTHON`, `MOTKRA_BRAIN_PORT` override) and every query goes through `/route`: the brain picks local vs cloud, redacts secrets and drops private turns; Electron streams the reply, restores placeholders, restores them in tool inputs and redacts tool output through `/redact` (fails closed). If the brain is unreachable it falls back to the keyword router, and never sends a conversation already marked private to the cloud. Both Python processes use `../.venv/Scripts/python.exe` when it exists. Voice (`voice.js`) spawns `dual_ai/voice_worker.py` once (Whisper STT, Piper TTS, JSON lines on stdin/stdout); if it is unavailable, dictation falls back to `voice/stt-win.ps1` and replies to the browser `speechSynthesis`. The HTTP server accepts only requests without Origin or from browser extensions.
 
 The extension (`dual_ai_ext`) and CLI (`dual_ai`) share one `.env` file located at `dual_ai/.env`. The extension loads it via `dotenv` from a relative path (`../dual_ai/.env`).
 
@@ -57,6 +57,7 @@ Local-first: the local model answers what it can; Claude (or Kimi) gets the rest
 - `main.py` — REPL on top of `Session`. Commands `/auto /local /cloud /kimi /stats /clear /history /quit`
 - `daemon.py` — desktop daemon and "privacy brain". `python daemon.py` = tray + push-to-talk hotkey + local voice + localhost API; `--headless` = API only (what `motkra-daemon` spawns). API on `DAEMON_PORT` (7433): `/status`, `/ask`, `/route`, `/redact`, `/mode`, `/clear`. Refuses browser origins and non-localhost Host headers. Extras: `pip install -r requirements-daemon.txt`
 - `voice.py` — faster-whisper STT, Piper TTS (first `.onnx` in `~/.motkra/voices`, else the Windows voice), `SentenceBuffer` speaks replies sentence by sentence and skips code blocks
+- `voice_worker.py` — voice for the Electron app: continuous mic with an energy-gate `Segmenter` → Whisper transcripts, Piper replies, mic ignored while speaking. Polls its stdin pipe on Windows (a blocking pipe read stalls DLL loads)
 - `bench/` — routing benchmark (see `bench/README.md`): `python bench/run.py`, report in `bench/reports/<machine>.md`. Results are cached per machine in `bench/results/<machine>/`; cloud answers are shared in `bench/results/cloud_answers.jsonl`
 - Tests: `cd dual_ai && python -m pytest` (privacy, routing, session, voice text helpers, daemon API)
 

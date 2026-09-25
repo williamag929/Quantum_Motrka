@@ -687,7 +687,7 @@ function addBubble(role, label) {
   return bubble;
 }
 
-// ── Voice: STT (local — Windows System.Speech via main process) ──────────
+// ── Voice: STT (local — Whisper via the main process) ────────────────────
 // No network calls. Audio never leaves the machine.
 let micActive    = false;
 let silenceTimer = null;
@@ -768,16 +768,21 @@ ttsBtn.addEventListener('click', () => {
   ttsEnabled = !ttsEnabled;
   ttsBtn.classList.toggle('active', ttsEnabled);
   ttsBtn.title = ttsEnabled ? 'Voice responses: ON  (click to mute)' : 'Voice responses: OFF';
-  if (!ttsEnabled) window.speechSynthesis.cancel();
+  if (!ttsEnabled) stopSpeaking();
 });
+
+function stopSpeaking() {
+  window.motkra.ttsStop();
+  window.speechSynthesis?.cancel();
+}
 
 /**
  * Speak a response — strips code fences, inline code, and markdown symbols.
  * Silently skips if TTS is off or the text is code-heavy.
  */
-function speak(text) {
-  if (!ttsEnabled || !window.speechSynthesis) return;
-  window.speechSynthesis.cancel();
+async function speak(text) {
+  if (!ttsEnabled) return;
+  window.speechSynthesis?.cancel();
 
   const prose = text
     .replace(/```[\s\S]*?```/g, '')          // remove code fences entirely
@@ -793,16 +798,14 @@ function speak(text) {
 
   const words = prose.split(/\s+/).filter(Boolean);
   if (words.length < 4) return;              // too short or all-code — skip
-  if (words.length > 200) {
-    // Cap to first 200 words so very long responses don't read forever
-    const snippet = words.slice(0, 200).join(' ') + '…';
-    _doSpeak(snippet);
-  } else {
-    _doSpeak(prose);
-  }
+  // Cap to first 200 words so very long responses don't read forever
+  const spoken = words.length > 200 ? words.slice(0, 200).join(' ') + '…' : prose;
+  // Piper (local, natural voice) when available, else the built-in browser voice
+  if (!(await window.motkra.ttsSpeak(spoken))) _doSpeak(spoken);
 }
 
 function _doSpeak(text) {
+  if (!window.speechSynthesis) return;
   const utt   = new SpeechSynthesisUtterance(text);
   utt.rate    = 1.05;
   utt.pitch   = 0.95;
@@ -895,7 +898,7 @@ async function send() {
     curBubble = null;
 
     // Read response aloud if TTS is on
-    speak(full);
+    speak(full).catch(err => console.warn('speak failed:', err));
 
   } catch (err) {
     if (curBubble) { curBubble.parentNode?.remove(); curBubble = null; }
@@ -917,7 +920,7 @@ async function send() {
 // ── Controls ──────────────────────────────────────────────────────────────
 closeBtn.addEventListener('click', () => {
   stopMic();
-  window.speechSynthesis.cancel();
+  stopSpeaking();
   window.motkra.hideWindow();
 });
 
@@ -927,14 +930,14 @@ clearBtn.addEventListener('click', () => {
   history = [];
   messagesEl.innerHTML = '';
   messagesEl.appendChild(emptyState);
-  window.speechSynthesis.cancel();
+  stopSpeaking();
 });
 
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape' && permQueue.length) { answerPermission('deny'); return; }
   if (e.key === 'Escape') {
     stopMic();
-    window.speechSynthesis.cancel();
+    stopSpeaking();
     window.motkra.hideWindow();
   }
 });

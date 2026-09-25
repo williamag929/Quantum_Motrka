@@ -22,6 +22,7 @@ for (const loc of ENV_CANDIDATES) {
 const tray    = require('./tray');
 const ipc     = require('./ipc');
 const brain   = require('./brain');
+const voice   = require('./voice');
 const fsTools = require('./fs-tools');
 const monitor = require('./email/monitor');
 const gmail   = require('./email/gmail');
@@ -100,54 +101,26 @@ function toggleChatWindow() {
   }
 }
 
-// ── Local STT (Windows System.Speech via PowerShell) ─────────────────────
-
-const { spawn } = require('child_process');
-let _sttProc = null;
-let _sttTarget = null; // BrowserWindow that receives transcript events
-
-function startSTT(targetWin) {
-  if (_sttProc) return; // already running
-  _sttTarget = targetWin;
-  const script = path.join(__dirname, 'voice', 'stt-win.ps1');
-  _sttProc = spawn('powershell.exe', [
-    '-NonInteractive', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', script,
-  ], { stdio: ['ignore', 'pipe', 'pipe'] });
-
-  let buf = '';
-  _sttProc.stdout.on('data', data => {
-    buf += data.toString();
-    const lines = buf.split('\n');
-    buf = lines.pop(); // keep incomplete last line
-    for (const line of lines) {
-      const text = line.trim();
-      if (text && _sttTarget && !_sttTarget.isDestroyed()) {
-        _sttTarget.webContents.send('stt-transcript', text);
-      }
-    }
-  });
-
-  _sttProc.stderr.on('data', d => console.warn('[stt]', d.toString().trim()));
-  _sttProc.on('exit', code => {
-    console.log(`[stt] process exited (${code})`);
-    _sttProc   = null;
-    _sttTarget = null;
-  });
-}
+// ── Local voice (Whisper + Piper via voice.js) ────────────────────────────
 
 function stopSTT() {
-  if (_sttProc) { try { _sttProc.kill(); } catch {} _sttProc = null; }
-  _sttTarget = null;
+  voice.stopListening();
+  voice.hush();
 }
-
-// ── IPC from renderer ─────────────────────────────────────────────────────
 
 ipcMain.handle('stt-start', event => {
   const win = BrowserWindow.fromWebContents(event.sender);
-  startSTT(win);
+  voice.listen(text => {
+    if (win && !win.isDestroyed()) win.webContents.send('stt-transcript', text);
+  });
 });
 
-ipcMain.handle('stt-stop', () => stopSTT());
+ipcMain.handle('stt-stop', () => voice.stopListening());
+
+// true = Piper is speaking it; false = not available, the renderer uses the browser voice
+ipcMain.handle('tts-speak', (_event, text) => voice.speak(String(text ?? '')));
+
+ipcMain.handle('tts-stop', () => voice.hush());
 
 // ── Folder permission prompts (agent file tools) ─────────────────────────
 
@@ -364,6 +337,10 @@ app.whenReady().then(() => {
   // keyword router if Python or the monorepo is not available.
   brain.start();
 
+  // Local voice: loads Whisper now so the first dictation is fast; falls back to
+  // Windows speech recognition if the voice extras are missing.
+  voice.start();
+
   // System tray icon and context menu
   tray.createTray({
     onOpenChat:    createChatWindow,
@@ -438,7 +415,7 @@ app.on('will-quit', () => {
   globalShortcut.unregisterAll();
   brain.stop();
   ipc.stopServer();
-  stopSTT();
+  voice.stop();
   if (_emailRunning) monitor.stop();
 });
 
