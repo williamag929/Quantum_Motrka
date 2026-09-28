@@ -1,0 +1,12 @@
+# Desktop daemon extras (daemon.py): tray, global hotkey, local voice.
+# Not needed for the CLI or when the Electron app runs the brain headless.
+-r requirements.txt
+pystray>=0.19
+pillow>=10.0
+keyboard>=0.13
+sounddevice>=0.5
+numpy>=1.26
+faster-whisper>=1.2
+piper-tts>=1.3
+pyttsx3>=2.90
+pywin32>=306; sys_platform == "win32"

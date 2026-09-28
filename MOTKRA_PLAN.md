@@ -341,6 +341,39 @@ Target: 1,000 GitHub stars. Timeline: ~8 weeks.
 
 ---
 
+## Phase 18 — Remote Approval · Layer 8 (Future)
+*Motkra stays on your PC and asks you for permission on your phone — no mobile app. It reaches you through channels you already have: Slack, Telegram, email, and eventually a phone call.*
+
+Principles:
+- **The AI lives locally.** Channels only carry the question and your answer; no reasoning, history or files run elsewhere.
+- **Outbound connections only.** Telegram long polling and Slack Socket Mode need no open port and no public server.
+- **Denied by default.** No answer before it expires means no. Every decision goes to an audit log.
+- **Private stays private.** Summaries sent to a channel are redacted (`privacy.redact`). If the action comes from a private turn, the channel only gets "private action pending, review on your PC".
+
+### 18A — Approval Core
+- [ ] **18A-1** Create an `approvals` module in the daemon: `request(action, summary, risk, expires)` → pending approval with id and one-time code, stored in `~/.motkra/approvals.json`
+- [ ] **18A-2** Risk tiers tied to the agent tools: read-only → never asks; reversible → asks on PC; irreversible (send email, delete, pay, publish) → PC **or** phone
+- [ ] **18A-3** Expiry with default deny; audit log in `~/.motkra/approvals.log` (who, what, which channel, answer, time)
+- [ ] **18A-4** Migrate the email approval loop (17D-3 … 17D-5) onto this core so every channel shares the same flow
+
+### 18B — Channels
+- [ ] **18B-1** **Telegram**: bot with long polling, inline buttons ✅ Approve / ❌ Deny / ✏️ Edit; only answers the owner's `chat_id`
+- [ ] **18B-2** **Slack**: app in Socket Mode, DM with Block Kit buttons; only accepts the owner's `user_id`
+- [ ] **18B-3** **Email**: reuse `gmail.js` (YES / NO / reply with text), already built in 17D
+- [ ] **18B-4** Escalation: notify on the preferred channel → no answer in N min → next channel. Quiet hours and a per-day limit
+
+### 18C — Phone Call (future)
+- [ ] **18C-1** Outbound call through a voice provider (e.g. Twilio): Motkra reads the summary aloud (Piper) and you answer "1 approve / 2 deny" or by voice
+- [ ] **18C-2** Constraint to solve: the provider needs to send your answer back to Motkra. Options: a temporary tunnel only while the call lasts, or polling the call result from the provider API (keeps outbound-only)
+- [ ] **18C-3** Phone calls are reserved for urgent, time-sensitive approvals (top escalation step only)
+
+### 18D — Security
+- [ ] **18D-1** Owner identity per channel (Telegram `chat_id`, Slack `user_id`, email address) set in `.env`; anything else is ignored and logged
+- [ ] **18D-2** A button press is valid once, only for its approval id, and only before it expires (no replay)
+- [ ] **18D-3** Irreversible actions over a set amount or risk level require a second factor: reply with the code shown on the PC
+
+---
+
 ## Settings Reference (all phases combined)
 
 ```json
@@ -390,3 +423,4 @@ Target: 1,000 GitHub stars. Timeline: ~8 weeks.
 | 8 | GIF + Marketplace + Product Hunt | 🚀 Launch |
 | 9 | Email agent — triage, trust levels, approval loop | Superhuman tier |
 | 9 | MCP server — expose Ollama to Claude Desktop | Ecosystem tier |
+| Future | Remote approval via Telegram / Slack / email / phone call — no mobile app | "It asks before it acts" |

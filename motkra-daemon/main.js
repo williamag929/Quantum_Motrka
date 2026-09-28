@@ -1,11 +1,12 @@
 'use strict';
 
 const {
-  app, BrowserWindow, globalShortcut, ipcMain, shell, session
+  app, BrowserWindow, clipboard, globalShortcut, ipcMain, shell, session
 } = require('electron');
-const path = require('path');
-const fs   = require('fs');
-const os   = require('os');
+const path   = require('path');
+const fs     = require('fs');
+const os     = require('os');
+const crypto = require('crypto');
 
 // ── Load API key from first found .env ────────────────────────────────────
 
@@ -20,6 +21,9 @@ for (const loc of ENV_CANDIDATES) {
 
 const tray    = require('./tray');
 const ipc     = require('./ipc');
+const brain   = require('./brain');
+const voice   = require('./voice');
+const fsTools = require('./fs-tools');
 const monitor = require('./email/monitor');
 const gmail   = require('./email/gmail');
 
@@ -97,62 +101,87 @@ function toggleChatWindow() {
   }
 }
 
-// ── Local STT (Windows System.Speech via PowerShell) ─────────────────────
-
-const { spawn } = require('child_process');
-let _sttProc = null;
-let _sttTarget = null; // BrowserWindow that receives transcript events
-
-function startSTT(targetWin) {
-  if (_sttProc) return; // already running
-  _sttTarget = targetWin;
-  const script = path.join(__dirname, 'voice', 'stt-win.ps1');
-  _sttProc = spawn('powershell.exe', [
-    '-NonInteractive', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', script,
-  ], { stdio: ['ignore', 'pipe', 'pipe'] });
-
-  let buf = '';
-  _sttProc.stdout.on('data', data => {
-    buf += data.toString();
-    const lines = buf.split('\n');
-    buf = lines.pop(); // keep incomplete last line
-    for (const line of lines) {
-      const text = line.trim();
-      if (text && _sttTarget && !_sttTarget.isDestroyed()) {
-        _sttTarget.webContents.send('stt-transcript', text);
-      }
-    }
-  });
-
-  _sttProc.stderr.on('data', d => console.warn('[stt]', d.toString().trim()));
-  _sttProc.on('exit', code => {
-    console.log(`[stt] process exited (${code})`);
-    _sttProc   = null;
-    _sttTarget = null;
-  });
-}
+// ── Local voice (Whisper + Piper via voice.js) ────────────────────────────
 
 function stopSTT() {
-  if (_sttProc) { try { _sttProc.kill(); } catch {} _sttProc = null; }
-  _sttTarget = null;
+  voice.stopListening();
+  voice.hush();
 }
-
-// ── IPC from renderer ─────────────────────────────────────────────────────
 
 ipcMain.handle('stt-start', event => {
   const win = BrowserWindow.fromWebContents(event.sender);
-  startSTT(win);
+  voice.listen(text => {
+    if (win && !win.isDestroyed()) win.webContents.send('stt-transcript', text);
+  });
 });
 
-ipcMain.handle('stt-stop', () => stopSTT());
+ipcMain.handle('stt-stop', () => voice.stopListening());
+
+// true = Piper is speaking it; false = not available, the renderer uses the browser voice
+ipcMain.handle('tts-speak', (_event, text) => voice.speak(String(text ?? '')));
+
+ipcMain.handle('tts-stop', () => voice.hush());
+
+// ── Folder permission prompts (agent file tools) ─────────────────────────
+
+const _pendingPermissions = new Map(); // id → resolve(scope)
+const PERMISSION_TIMEOUT_MS = 2 * 60 * 1000;
+
+function askFolderPermission(win, request) {
+  return new Promise(resolve => {
+    if (!win || win.isDestroyed()) return resolve('deny');
+    const id = crypto.randomUUID();
+    _pendingPermissions.set(id, resolve);
+    if (!win.isVisible()) win.show();
+    win.focus();
+    win.webContents.send('fs-permission-request', { id, ...request });
+    setTimeout(() => {
+      if (_pendingPermissions.delete(id)) resolve('deny');
+    }, PERMISSION_TIMEOUT_MS);
+  });
+}
+
+ipcMain.on('fs-permission-response', (event, { id, scope }) => {
+  if (!chatWin || event.sender !== chatWin.webContents) return;
+  const resolve = _pendingPermissions.get(id);
+  if (!resolve) return;
+  _pendingPermissions.delete(id);
+  resolve(fsTools.SCOPES.includes(scope) ? scope : 'deny');
+});
+
+ipcMain.handle('fs-grants', () => fsTools.listGrants());
+ipcMain.handle('fs-revoke-all', () => { fsTools.revokeAll(); return true; });
 
 ipcMain.handle('query-stream', async (event, { text, history, model = 'auto' }) => {
+  const win   = BrowserWindow.fromWebContents(event.sender);
+  const send  = (channel, payload) => { if (!event.sender.isDestroyed()) event.sender.send(channel, payload); };
+  const agent = win === chatWin
+    ? { ask: request => askFolderPermission(win, request), onActivity: line => send('tool-activity', line) }
+    : null;
   return ipc.handleQueryStream(
     text, history,
-    token   => { if (!event.sender.isDestroyed()) event.sender.send('token', token); },
+    token  => send('token', token),
     model,
-    chosen  => { if (!event.sender.isDestroyed()) event.sender.send('model-selected', chosen); }
+    chosen => send('model-selected', chosen),
+    agent,
+    info   => send('route-info', info)
   );
+});
+
+// ── Copy and answer feedback ─────────────────────────────────────────────
+
+ipcMain.handle('copy-text', (_event, text) => { clipboard.writeText(String(text ?? '')); return true; });
+
+const FEEDBACK_FILE = path.join(os.homedir(), '.motkra', 'feedback.jsonl');
+
+ipcMain.handle('feedback', (_event, { rating, model, question, answer }) => {
+  if (!['up', 'down', null].includes(rating)) return false;
+  fs.mkdirSync(path.dirname(FEEDBACK_FILE), { recursive: true });
+  fs.appendFileSync(FEEDBACK_FILE, JSON.stringify({
+    ts: new Date().toISOString(), rating, model: String(model ?? ''),
+    question: String(question ?? ''), answer: String(answer ?? ''),
+  }) + '\n');
+  return true;
 });
 
 ipcMain.on('hide-window', () => {
@@ -304,6 +333,14 @@ app.whenReady().then(() => {
   const port = parseInt(process.env.MOTKRA_DAEMON_PORT ?? '7432', 10);
   ipc.startServer(port);
 
+  // Privacy brain (dual_ai/daemon.py): router v3 + secret redaction. Falls back to the
+  // keyword router if Python or the monorepo is not available.
+  brain.start();
+
+  // Local voice: loads Whisper now so the first dictation is fast; falls back to
+  // Windows speech recognition if the voice extras are missing.
+  voice.start();
+
   // System tray icon and context menu
   tray.createTray({
     onOpenChat:    createChatWindow,
@@ -376,8 +413,9 @@ function toggleEmailMonitor() {
 
 app.on('will-quit', () => {
   globalShortcut.unregisterAll();
+  brain.stop();
   ipc.stopServer();
-  stopSTT();
+  voice.stop();
   if (_emailRunning) monitor.stop();
 });
 
