@@ -2,7 +2,7 @@
 
 const path  = require('path');
 const fs    = require('fs');
-const { exec } = require('child_process');
+const { runAllowed } = require('./core/command');
 
 let vscode;
 try { vscode = require('vscode'); } catch { vscode = null; }
@@ -75,7 +75,7 @@ const TOOLS = [
     description:
       'Run a shell command in the workspace. ' +
       'Use for npm, pytest, git, python, node, etc. ' +
-      'Only executables in motkra.allowedCommands are permitted.',
+      'Only executables in motkra.allowedCommands are permitted. No shell: pipes, && and redirection are not supported.',
     input_schema: {
       type: 'object',
       properties: {
@@ -195,28 +195,13 @@ async function executeTool(name, input, opts = {}) {
 
     case 'run_command': {
       const { cmd, cwd: relCwd } = input;
-      const exe = cmd.trim().split(/\s+/)[0];
-
       const cfg     = vscode?.workspace?.getConfiguration('motkra');
       const allowed = allowedCommands
         ?? cfg?.get('allowedCommands')
         ?? ['npm', 'npx', 'python', 'python3', 'pytest', 'git', 'node'];
-
-      if (!allowed.includes(exe)) {
-        return `Error: '${exe}' is not in motkra.allowedCommands.\nAllowed: ${allowed.join(', ')}`;
-      }
-
       const timeoutMs = ((terminalTimeout ?? cfg?.get('terminalTimeout') ?? 30)) * 1000;
       const workdir   = relCwd ? resolvePath(relCwd) : workspaceRoot();
-
-      return new Promise(res => {
-        exec(cmd, { cwd: workdir, timeout: timeoutMs }, (err, stdout, stderr) => {
-          const out = [stdout, stderr].filter(Boolean).join('\n').trim();
-          if (out)           res(out);
-          else if (err?.code) res(`Exit code ${err.code}`);
-          else               res('Done (no output)');
-        });
-      });
+      return runAllowed(String(cmd ?? ''), { cwd: workdir, allowed, timeoutMs });
     }
 
     case 'web_search': {

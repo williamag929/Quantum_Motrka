@@ -8,6 +8,7 @@
   "categories": ["Other"],
   "activationEvents": [],
   "main": "./extension.js",
+  "scripts": { "test": "node --test" },
   "contributes": {
     "viewsContainers": {
       "activitybar": [

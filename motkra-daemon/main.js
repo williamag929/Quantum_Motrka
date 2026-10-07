@@ -24,6 +24,8 @@ const ipc     = require('./ipc');
 const brain   = require('./brain');
 const voice   = require('./voice');
 const fsTools = require('./fs-tools');
+const consoleTools = require('./console-tools');
+const browser = require('./browser');
 const monitor = require('./email/monitor');
 const gmail   = require('./email/gmail');
 
@@ -149,8 +151,15 @@ ipcMain.on('fs-permission-response', (event, { id, scope }) => {
   resolve(fsTools.SCOPES.includes(scope) ? scope : 'deny');
 });
 
-ipcMain.handle('fs-grants', () => fsTools.listGrants());
-ipcMain.handle('fs-revoke-all', () => { fsTools.revokeAll(); return true; });
+ipcMain.handle('fs-grants', () => [
+  ...fsTools.listGrants().map(g => ({ kind: 'folder', ...g })),
+  ...consoleTools.listGrants().map(g => ({ kind: 'command', ...g })),
+  ...browser.listGrants().map(g => ({ kind: 'site', ...g })),
+]);
+ipcMain.handle('fs-revoke-all', () => {
+  fsTools.revokeAll(); consoleTools.revokeAll(); browser.revokeAll();
+  return true;
+});
 
 ipcMain.handle('query-stream', async (event, { text, history, model = 'auto' }) => {
   const win   = BrowserWindow.fromWebContents(event.sender);
@@ -414,6 +423,7 @@ function toggleEmailMonitor() {
 app.on('will-quit', () => {
   globalShortcut.unregisterAll();
   brain.stop();
+  browser.close();
   ipc.stopServer();
   voice.stop();
   if (_emailRunning) monitor.stop();

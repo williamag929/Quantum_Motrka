@@ -374,6 +374,27 @@ Principles:
 
 ---
 
+## Phase 19 — Hands: Secure Console & Motkra Browser · Layer 9
+*Motkra acts on the PC: runs commands and drives its own browser, with consent per command and per site.*
+
+### 19A — Secure Console
+- [x] **19A-1** `run_command` without a shell; chaining, pipes and redirection refused
+- [x] **19A-2** Tiers read / run / destructive; destructive and PowerShell approved every time
+- [x] **19A-3** Child processes do not inherit API keys; output redacted through the brain; audit log
+- [x] **19A-4** Fix the VS Code extension's `run_command` allowlist bypass (`git status & del …`)
+- [ ] **19A-5** Stream long command output to the chat while it runs
+- [ ] **19A-6** Approve commands from the phone (Phase 18)
+
+### 19B — Motkra Browser
+- [x] **19B-1** Own Chromium window with persistent, sandboxed profile; no Chrome/Edge permissions
+- [x] **19B-2** Tools: open, read, click, type, back; per-site `browse` / `act` consent
+- [x] **19B-3** Page content marked untrusted; never types passwords, payment data or secrets
+- [ ] **19B-4** Address bar and tabs for the user; screenshot tool (vision)
+- [ ] **19B-5** Password vault: import the browser's exported CSV, encrypt with `safeStorage`, fill by code on the exact origin only — passwords never reach any model
+- [ ] **19B-6** Let the local model use tools (needs a Gemma tool-calling evaluation)
+
+---
+
 ## Settings Reference (all phases combined)
 
 ```json
@@ -424,3 +445,4 @@ Principles:
 | 9 | Email agent — triage, trust levels, approval loop | Superhuman tier |
 | 9 | MCP server — expose Ollama to Claude Desktop | Ecosystem tier |
 | Future | Remote approval via Telegram / Slack / email / phone call — no mobile app | "It asks before it acts" |
+| 10 | Secure console + Motkra Browser (own Chromium) | "It has hands" |

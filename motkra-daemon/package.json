@@ -4,8 +4,9 @@
   "description": "Motkra system tray daemon — global hotkey mini-chat window",
   "main": "main.js",
   "scripts": {
-    "start":     "electron .",
+    "start":     "node scripts/electron.js .",
     "test":      "node --test",
+    "test:browser": "node scripts/electron.js scripts/browser-smoke.js",
     "build:win": "electron-builder --win",
     "build:mac": "electron-builder --mac",
     "build:all": "electron-builder --win --mac"

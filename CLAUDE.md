@@ -12,7 +12,7 @@ Quantum/
 ├── dual_ai_ext/      VS Code extension — sidebar agent panel backed by dual_ai
 ├── motkra-daemon/    Electron tray app — global-hotkey chat window, Gmail agent; routes through the dual_ai brain
 ├── motkra-browser/   Browser extension — talks to motkra-daemon on 127.0.0.1:7432
-├── motkra-mcp/       MCP server exposing local Ollama models
+├── motkra-mcp/       MCP server: local Ollama models + motkra_digest for Claude Code (.mcp.json)
 └── bell_state/       Qiskit bell-state experiments (separate, unrelated to dual_ai)
 ```
 
@@ -21,6 +21,20 @@ Quantum/
 ### motkra-daemon (Electron)
 
 `npm start` / `npm test` (node:test). Owns port 7432 (VS Code + browser extensions). On startup `brain.js` spawns `python ../dual_ai/daemon.py --headless` on 7433 (`MOTKRA_PYTHON`, `MOTKRA_BRAIN_PORT` override) and every query goes through `/route`: the brain picks local vs cloud, redacts secrets and drops private turns; Electron streams the reply, restores placeholders, restores them in tool inputs and redacts tool output through `/redact` (fails closed). If the brain is unreachable it falls back to the keyword router, and never sends a conversation already marked private to the cloud. Both Python processes use `../.venv/Scripts/python.exe` when it exists. Voice (`voice.js`) spawns `dual_ai/voice_worker.py` once (Whisper STT, Piper TTS, JSON lines on stdin/stdout); if it is unavailable, dictation falls back to `voice/stt-win.ps1` and replies to the browser `speechSynthesis`. The HTTP server accepts only requests without Origin or from browser extensions.
+
+Agent tools (chat window, Claude only; `ipc.js` `runAgentTool`), all behind one consent modal (`/permissions`, `/forget`):
+- `fs-tools.js` — folders: list/read/write, per-folder grants; `.env`, keys and `~/.ssh`-style dirs are never shared.
+- `console-tools.js` — `run_command`: no shell (refuses `& | ; < >`), `.cmd` programs via a quoted `cmd /c` that refuses `"%^&|<>!`. Tiers: read (status/version, auto inside a read-granted folder) → run (approval, rememberable per exact command + folder) → destructive (deletes, pushes, system tools, PowerShell: approval every time). Child env drops `*KEY*/*TOKEN*/*SECRET*` vars.
+- `browser.js` — Motkra Browser: Chromium window, `persist:motkra-browser` partition, sandboxed, no preload, permissions and downloads refused. `browse`/`act` grants per origin. Page text is wrapped in `<untrusted_web_content>` (closing tag defanged). Never types into password or payment fields, and placeholders are never restored in browser inputs.
+- `grant-store.js` — shared once/session/always grant + audit store (`~/.motkra/*-permissions.json`, `*-audit.jsonl`).
+- Requests that ask to act (`needsTools`) go to Claude even if the router picked local, unless the conversation is private.
+- `npm run test:browser` drives the real browser against a local page (`scripts/browser-smoke.js`). `scripts/electron.js` launches Electron without `node_modules/.bin` and clears `ELECTRON_RUN_AS_NODE` (set in VS Code terminals).
+
+### motkra-mcp (delegating work from Claude Code)
+
+`npm test` (node:test). Registered in `.mcp.json`, so Claude Code sessions here get `motkra_digest` / `motkra_result`: the local model (`MOTKRA_MCP_MODEL`, default `gemma4:e2b`) reads workspace files itself (line-numbered, map-reduce over ~24k-char chunks) and returns a short answer citing `path:line`, redacted by `dual_ai/privacy.py` (fails closed). Past `wait_seconds` the digest becomes a background job; jobs run one at a time.
+
+When to use it: logs or outputs too long to read where you only need the conclusion — redirect command output to a file, then digest it with a `pattern` (e.g. `"error|fail|traceback"`). On this CPU-only machine a filtered digest takes about a minute and an unfiltered one 2–4 minutes per chunk, so pass `wait_seconds: 0` and keep working. Treat answers as leads and check anything you act on; don't delegate reasoning or code changes.
 
 The extension (`dual_ai_ext`) and CLI (`dual_ai`) share one `.env` file located at `dual_ai/.env`. The extension loads it via `dotenv` from a relative path (`../dual_ai/.env`).
 
