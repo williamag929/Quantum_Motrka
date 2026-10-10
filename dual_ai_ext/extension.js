@@ -31,6 +31,9 @@ const ambientWatcher        = require('./ambient/watcher');
 const voice                 = require('./core/voice');
 const indexer               = require('./core/indexer');
 const orchestrator          = require('./core/orchestrator');
+const { loadProjectRules, mentionsWorktrees } = require('./core/project-rules');
+const branchGuard           = require('./core/branch-guard');
+const providerSettings      = require('./core/provider-settings');
 
 const DEFAULT_SYSTEM_PROMPT =
   'You are a coding agent inside VS Code. ' +
@@ -96,6 +99,8 @@ class MoktaProvider {
     this._activeAgent      = 'default';
     this._pendingDiffs      = new Map();
     this._writeAccessDecisions = new Map();
+    this._sessionRoots         = new Map();   // sessionId → Motkra's worktree once a task moved there
+    this._guardOverrides       = new Set();   // folders where the user chose "Write here anyway"
     this._currentLocalModel = null;
     this._sttDispose        = null;  // active STT session dispose fn
     this._ttsMuted          = false;
@@ -115,16 +120,79 @@ class MoktaProvider {
   get _systemPrompt() {
     const agent  = this._agents.find(a => a.id === this._activeAgent);
     const base   = agent?.systemPrompt || DEFAULT_SYSTEM_PROMPT;
+    // Project rules (AGENTS.md, CLAUDE.md, copilot-instructions + files they reference) apply to
+    // every agent; the selected agent's own file is not repeated.
+    const rules  = loadProjectRules(this._workspace, agent?.id && agent.id !== 'default' ? [agent.id] : []).text;
     const memCtx = memory.buildMemoryContext(this._workspace);
-    return memCtx ? `${base}\n\n---\n${memCtx}` : base;
+    return [base, rules, memCtx].filter(Boolean).join('\n\n---\n');
+  }
+
+  /**
+   * May Motkra change files (or run a mutating git command) at `target` for this session?
+   * Refuses protected branches and, when the project's rules ask for worktrees, the main
+   * checkout — and offers to create Motkra's own worktree, where the task then continues.
+   * @returns {Promise<{ok:boolean, root?:string, message?:string}>}
+   */
+  async _guardWrite(sid, target, task, toolOpts) {
+    const root = this._sessionRoots.get(sid) ?? fs.realpathSync(this._workspace);
+    if (this._guardOverrides.has(root)) return { ok: await this._requestWriteAccess(root) };
+
+    const cfg = vscode.workspace.getConfiguration('motkra');
+    const requireMode = cfg.get('requireWorktree', 'auto');
+    const rules = loadProjectRules(this._workspace).text;
+    const policy = {
+      protectedBranches: cfg.get('protectedBranches') ?? branchGuard.DEFAULT_PROTECTED,
+      requireWorktree: requireMode === 'always' || (requireMode === 'auto' && mentionsWorktrees(rules)),
+    };
+    // `target` is a file (write) or a folder (git command); check the nearest folder that exists.
+    let where = target;
+    while (!fs.existsSync(where) || !fs.statSync(where).isDirectory()) {
+      const up = path.dirname(where);
+      if (up === where) break;
+      where = up;
+    }
+    const check = branchGuard.checkWrite(where, policy);
+    if (check.ok) return { ok: await this._requestWriteAccess(root) };
+
+    const plan = branchGuard.suggestWorktree(check.info, task, rules);   // honours the worktree the rules give Motkra
+    const choice = await vscode.window.showWarningMessage(
+      `Motkra won't change files here: ${check.reason}.\n\n` +
+      `Create its own worktree instead?\n${plan.dir}\nbranch ${plan.branch} (from ${plan.base})`,
+      { modal: true }, 'Create worktree', 'Write here anyway'
+    );
+
+    if (choice === 'Create worktree') {
+      const branch = await vscode.window.showInputBox({
+        prompt: 'Branch for this task', value: plan.branch,
+        validateInput: v => (/^[\w][\w./-]*$/.test(v) ? null : 'Use letters, numbers and / . _ -'),
+      });
+      if (!branch) return { ok: false, message: 'The user cancelled creating a worktree; nothing was written. Ask how to proceed.' };
+      let dir;
+      try { dir = fs.realpathSync(branchGuard.createWorktree(check.info, { ...plan, branch })); }
+      catch (err) { return { ok: false, message: `Could not create the worktree: ${err.message}. Nothing was written.` }; }
+      this._sessionRoots.set(sid, dir);
+      toolOpts.root = dir;
+      this._out().appendLine(`[Guard] ${check.reason} → working in ${dir} (${branch})`);
+      vscode.window.showInformationMessage(`Motkra is working in ${dir} on branch ${branch}.`, 'Open folder')
+        .then(a => { if (a) vscode.commands.executeCommand('vscode.openFolder', vscode.Uri.file(dir), { forceNewWindow: true }); });
+      if (!await this._requestWriteAccess(dir)) return { ok: false, message: `Write access denied in ${dir}.` };
+      return { ok: true, root: dir,
+        message: `Moved to Motkra's worktree ${dir} on branch ${branch}: this and every further change go there. ` +
+                 'Use paths relative to the workspace.' };
+    }
+    if (choice === 'Write here anyway') {
+      this._guardOverrides.add(root);
+      return { ok: await this._requestWriteAccess(root) };
+    }
+    return { ok: false, message: `Not written: ${check.reason}. Tell the user and ask how to proceed (for example, in a worktree).` };
   }
 
   get _activeHistory() {
     return this._sessions.get(this._activeSessId)?.history ?? [];
   }
 
-  async _requestWriteAccess() {
-    const workspace = fs.realpathSync(this._workspace);
+  async _requestWriteAccess(folder = this._workspace) {
+    const workspace = fs.realpathSync(folder);
     if (this._writeAccessDecisions.has(workspace)) return this._writeAccessDecisions.get(workspace);
     const answer = await vscode.window.showWarningMessage(
       `Allow Motkra to create and modify files in ${workspace} for this VS Code session? ` +
@@ -371,11 +439,22 @@ class MoktaProvider {
     }
 
     // ── Route ──────────────────────────────────────────────────────────
-    const model = forcedLocal ? 'local'
-      : mode === 'cloud' ? 'cloud'
-      : mode === 'kimi' ? 'kimi'
-      : mode === 'local' ? 'local'
-      : route(userText);
+    // The router picks local vs cloud; the providers turned on in the Motkra app decide who answers.
+    const providers = providerSettings.load();
+    const picked = providerSettings.pick(route(userText), {
+      available: providers.available,
+      cloudPreference: providers.cloudPreference,
+      forced: ['local', 'cloud', 'kimi'].includes(mode) ? mode : null,
+      secretLocal: forcedLocal,
+    });
+    if (picked.blocked) {
+      this._post({ type: 'error', text: picked.blocked, sessionId: sid });
+      sess.history.pop();
+      this._post({ type: 'done', sessionId: sid });
+      return;
+    }
+    const model = picked.model;
+    if (picked.note) this._out().appendLine(`[Route] ${model} (${picked.note})`);
 
     const s          = extra => ({ sessionId: sid, ...extra });
     const ollamaOpts = {
@@ -386,8 +465,9 @@ class MoktaProvider {
     const toolOpts   = {
       allowedCommands: cfg.get('allowedCommands'),
       terminalTimeout: cfg.get('terminalTimeout'),
-      onWriteAccessRequest: () => this._requestWriteAccess(),
+      root: this._sessionRoots.get(sid),
     };
+    toolOpts.onWriteAccessRequest = target => this._guardWrite(sid, target, userText, toolOpts);
 
     // ── RAG context (Phase 6) — inject relevant files for cloud agents ────
     if ((model === 'cloud' || model === 'kimi') && cfg.get('workspaceIndex', true) && indexer.isReady()) {
@@ -495,7 +575,9 @@ class MoktaProvider {
     const toolOpts = {
       allowedCommands: cfg.get('allowedCommands'),
       terminalTimeout: cfg.get('terminalTimeout'),
+      root: this._sessionRoots.get(sid),
     };
+    toolOpts.onWriteAccessRequest = target => this._guardWrite(sid, target, goal, toolOpts);
 
     this._planCancelled   = false;
     this._pausedTasks.clear();

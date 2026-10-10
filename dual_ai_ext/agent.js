@@ -2,7 +2,8 @@
 
 const path  = require('path');
 const fs    = require('fs');
-const { runAllowed } = require('./core/command');
+const { runAllowed, tokenize } = require('./core/command');
+const { isMutatingGit } = require('./core/branch-guard');
 
 let vscode;
 try { vscode = require('vscode'); } catch { vscode = null; }
@@ -131,8 +132,8 @@ function workspaceRoot() {
   return fs.realpathSync(vscode?.workspace?.workspaceFolders?.[0]?.uri?.fsPath ?? process.cwd());
 }
 
-function resolvePath(p) {
-  const root = workspaceRoot();
+/** @param {string} [root]  the session's root: the workspace, or Motkra's worktree once it moved there */
+function resolvePath(p, root = workspaceRoot()) {
   const full = path.resolve(root, p);
   const isWithinRoot = candidate => {
     const relative = path.relative(root, candidate);
@@ -170,17 +171,34 @@ function resolvePath(p) {
  * @param {string[]} [opts.allowedCommands]
  * @param {number}   [opts.terminalTimeout]   seconds
  */
+/**
+ * Ask whether Motkra may change things at `target`. The answer may move the session to another
+ * root (Motkra's own worktree), in which case the change must be made there instead.
+ * @returns {Promise<{ok:boolean, root?:string, message?:string}>}
+ */
+async function requestWrite(onWriteAccessRequest, target) {
+  if (!onWriteAccessRequest) return { ok: false };
+  const answer = await onWriteAccessRequest(target);
+  return typeof answer === 'boolean' ? { ok: answer } : answer;
+}
+
+const noteOf = access => (access.message ? `\n(${access.message})` : '');
+
 async function executeTool(name, input, opts = {}) {
   const { onDiffRequest, onWriteAccessRequest, allowedCommands, terminalTimeout } = opts;
+  let root = opts.root ?? workspaceRoot();
 
   switch (name) {
 
     case 'read_file': {
-      return fs.readFileSync(resolvePath(input.path), 'utf8');
+      return fs.readFileSync(resolvePath(input.path, root), 'utf8');
     }
 
     case 'write_file': {
-      const full = resolvePath(input.path);
+      const access = await requestWrite(onWriteAccessRequest, resolvePath(input.path, root));
+      if (!access.ok) return access.message ?? `Write access denied: ${input.path}`;
+      if (access.root) root = access.root;
+      const full = resolvePath(input.path, root);
       let before = '';
       let exists = true;
       try { before = fs.readFileSync(full, 'utf8'); }
@@ -189,41 +207,38 @@ async function executeTool(name, input, opts = {}) {
         exists = false;
       }
 
-      if (exists && before === input.content) return `No changes needed: ${input.path}`;
-      if (!onWriteAccessRequest || !await onWriteAccessRequest()) {
-        return `Write access denied: ${input.path}`;
-      }
+      if (exists && before === input.content) return `No changes needed: ${input.path}${noteOf(access)}`;
       const id       = `diff_${Date.now()}`;
       const accepted = await onDiffRequest?.(id, input.path, before, input.content);
       if (!accepted) return `Edit rejected by user: ${input.path}`;
 
       fs.mkdirSync(path.dirname(full), { recursive: true });
       fs.writeFileSync(full, input.content, 'utf8');
-      return `Wrote ${input.path}`;
+      return `Wrote ${input.path}${noteOf(access)}`;
     }
 
     case 'str_replace': {
-      const full    = resolvePath(input.path);
+      const access = await requestWrite(onWriteAccessRequest, resolvePath(input.path, root));
+      if (!access.ok) return access.message ?? `Write access denied: ${input.path}`;
+      if (access.root) root = access.root;
+      const full    = resolvePath(input.path, root);
       const content = fs.readFileSync(full, 'utf8');
       if (!content.includes(input.old_text)) {
         throw new Error(`Text not found in ${input.path}: "${input.old_text.slice(0, 60)}"`);
       }
       const newContent = content.replace(input.old_text, input.new_text);
 
-      if (content === newContent) return `No changes needed: ${input.path}`;
-      if (!onWriteAccessRequest || !await onWriteAccessRequest()) {
-        return `Write access denied: ${input.path}`;
-      }
+      if (content === newContent) return `No changes needed: ${input.path}${noteOf(access)}`;
       const id       = `diff_${Date.now()}`;
       const accepted = await onDiffRequest?.(id, input.path, content, newContent);
       if (!accepted) return `Edit rejected by user: ${input.path}`;
 
       fs.writeFileSync(full, newContent, 'utf8');
-      return `Edited ${input.path}`;
+      return `Edited ${input.path}${noteOf(access)}`;
     }
 
     case 'list_files': {
-      const dir     = input.path ? resolvePath(input.path) : workspaceRoot();
+      const dir     = input.path ? resolvePath(input.path, root) : root;
       const entries = fs.readdirSync(dir, { withFileTypes: true });
       return entries.map(e => (e.isDirectory() ? `${e.name}/` : e.name)).join('\n');
     }
@@ -235,8 +250,18 @@ async function executeTool(name, input, opts = {}) {
         ?? cfg?.get('allowedCommands')
         ?? ['npm', 'npx', 'python', 'python3', 'pytest', 'git', 'node'];
       const timeoutMs = ((terminalTimeout ?? cfg?.get('terminalTimeout') ?? 30)) * 1000;
-      const workdir   = relCwd ? resolvePath(relCwd) : workspaceRoot();
-      return runAllowed(String(cmd ?? ''), { cwd: workdir, allowed, timeoutMs });
+      let workdir     = relCwd ? resolvePath(relCwd, root) : root;
+      // git commands that change the repository obey the same branch/worktree rules as file writes.
+      let argv = [];
+      try { argv = tokenize(String(cmd ?? '')); } catch { /* runAllowed reports the parse error */ }
+      let note = '';
+      if (isMutatingGit(argv)) {
+        const access = await requestWrite(onWriteAccessRequest, workdir);
+        if (!access.ok) return access.message ?? `Not allowed to change the repository here: ${cmd}`;
+        if (access.root) workdir = relCwd ? resolvePath(relCwd, access.root) : access.root;
+        note = noteOf(access);
+      }
+      return (await runAllowed(String(cmd ?? ''), { cwd: workdir, allowed, timeoutMs })) + note;
     }
 
     case 'web_search': {

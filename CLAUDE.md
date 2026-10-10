@@ -89,13 +89,17 @@ npm install
 # Open dual_ai_ext/ folder in VS Code, press F5 → Extension Development Host
 ```
 
-To build a permanent `.vsix`:
+To build a permanent `.vsix` (bump `"version"` in `package.json` first so VS Code treats it as an update):
 
 ```powershell
 npm install -g @vscode/vsce
-vsce package --no-dependencies
-# Install from VSIX via the Extensions panel
+npm test
+vsce package                                         # keep node_modules: the extension needs @anthropic-ai/sdk, dotenv…
+code --install-extension motkra-<version>.vsix --force
+# then Developer: Reload Window in each VS Code window
 ```
+
+`.vscodeignore` keeps `.env`, `test/` and old `.vsix` files out of the package; check with `vsce ls` before installing.
 
 ### Architecture
 
@@ -107,6 +111,12 @@ The extension registers a single `WebviewViewProvider` (`DualAIProvider`) that o
 - **`clients/gemma.js`** — raw `http.request` to Ollama NDJSON streaming on port 11434.
 - **`agents.js`** — scans workspace for agent definition files (`.github/copilot-instructions.md`, `.github/agents/`, `.agents/`, `CLAUDE.md`, `architect.yml`). Parses optional YAML frontmatter (`name:`, `description:`) from `.md` files. The resulting agent list populates the extension's agent selector; each agent supplies an alternative system prompt to `agent.js`.
 - **`media/panel.html`** — self-contained chat UI (vanilla JS, no bundler).
+
+### Project rules, branch guard and providers
+
+- **`core/project-rules.js`** — every agent's system prompt gets the workspace's `AGENTS.md`, `CLAUDE.md`, `.github/copilot-instructions.md` plus the `.md` files they reference (one level, size-capped), the way Claude Code loads CLAUDE.md. Selecting an agent adds its prompt; it no longer replaces the project rules.
+- **`core/branch-guard.js`** — before a write (`write_file`, `str_replace`) or a mutating `git` command, `_guardWrite` refuses protected branches (`motkra.protectedBranches` + the repo's default) and, with `motkra.requireWorktree` (`auto` = the rules mention worktrees), the main checkout. It offers to create Motkra's worktree under `<repo parent>/wt/` — named as the rules declare for Motkra, else after the other agents' pattern (`api-claude` → `api-motkra`), else `<repo>-motkra`; branch `motkra/<task>` from the current branch — and moves the session there (`toolOpts.root`), so the task continues in the worktree.
+- **`core/provider-settings.js`** — reads the desktop app's `~/.motkra/settings.json` (Ollama / Claude / NVIDIA on-off + preferred cloud) so the panel's Auto mode respects it; a message with a detected secret only goes to the local model.
 
 ### Claude tools available to the agent
 

@@ -2,7 +2,7 @@
 
 const https = require('https');
 
-const URL = new URL('https://integrate.api.nvidia.com/v1/chat/completions');
+const ENDPOINT = new URL('https://integrate.api.nvidia.com/v1/chat/completions');
 
 /**
  * Stream a response from Kimi through NVIDIA's OpenAI-compatible API.
@@ -25,7 +25,7 @@ function streamKimi(messages, onToken, tools = null) {
   });
 
   return new Promise((resolve, reject) => {
-    const req = https.request(URL, {
+    const req = https.request(ENDPOINT, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${key}`,

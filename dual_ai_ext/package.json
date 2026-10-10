@@ -2,7 +2,7 @@
   "name": "motkra",
   "displayName": "Motkra",
   "description": "Privacy-first AI coding agent — Claude, Kimi (NVIDIA), and local models via Ollama",
-  "version": "0.2.0",
+  "version": "0.2.2",
   "publisher": "local",
   "engines": { "vscode": "^1.80.0" },
   "categories": ["Other"],
@@ -84,6 +84,18 @@
           "items": { "type": "string" },
           "default": ["npm", "npx", "python", "python3", "pytest", "git", "node"],
           "description": "Executables the terminal tool is allowed to run."
+        },
+        "motkra.protectedBranches": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": ["main", "master", "develop", "trunk"],
+          "description": "Branches Motkra never changes directly (the repo's default branch is always included). It offers to create its own worktree and branch instead."
+        },
+        "motkra.requireWorktree": {
+          "type": "string",
+          "enum": ["auto", "always", "never"],
+          "default": "auto",
+          "description": "Refuse to change files in a repo's main checkout and work in Motkra's own worktree. auto = when the project's instructions (AGENTS.md, CLAUDE.md…) mention worktrees."
         },
         "motkra.proactiveErrors": {
           "type": "boolean",
