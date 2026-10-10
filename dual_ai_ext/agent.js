@@ -10,6 +10,7 @@ try { vscode = require('vscode'); } catch { vscode = null; }
 const os = require('os');
 
 const { default: Anthropic } = require('@anthropic-ai/sdk');
+const { streamKimi } = require('./clients/kimi');
 let client = null;
 function getClient() {
   if (!client) client = new Anthropic();
@@ -127,11 +128,35 @@ const TOOLS = [
 // ── Workspace helpers ─────────────────────────────────────────────────────────
 
 function workspaceRoot() {
-  return vscode?.workspace?.workspaceFolders?.[0]?.uri?.fsPath ?? process.cwd();
+  return fs.realpathSync(vscode?.workspace?.workspaceFolders?.[0]?.uri?.fsPath ?? process.cwd());
 }
 
 function resolvePath(p) {
-  return path.isAbsolute(p) ? p : path.join(workspaceRoot(), p);
+  const root = workspaceRoot();
+  const full = path.resolve(root, p);
+  const isWithinRoot = candidate => {
+    const relative = path.relative(root, candidate);
+    return relative === '' || (!path.isAbsolute(relative) && relative !== '..' && !relative.startsWith(`..${path.sep}`));
+  };
+
+  if (!isWithinRoot(full)) throw new Error('File paths must stay inside the workspace.');
+
+  let existing = full;
+  while (true) {
+    try {
+      fs.lstatSync(existing);
+      break;
+    } catch (err) {
+      if (err.code !== 'ENOENT') throw err;
+      const parent = path.dirname(existing);
+      if (parent === existing) throw new Error('Could not resolve a path inside the workspace.');
+      existing = parent;
+    }
+  }
+  if (!isWithinRoot(fs.realpathSync(existing))) {
+    throw new Error('File paths must stay inside the workspace.');
+  }
+  return full;
 }
 
 // ── Tool executor ─────────────────────────────────────────────────────────────
@@ -141,11 +166,12 @@ function resolvePath(p) {
  * @param {Object}   input
  * @param {Object}   opts
  * @param {Function} [opts.onDiffRequest]     (id, filePath, before, after) → Promise<boolean>
+ * @param {Function} [opts.onWriteAccessRequest] () → Promise<boolean>
  * @param {string[]} [opts.allowedCommands]
  * @param {number}   [opts.terminalTimeout]   seconds
  */
 async function executeTool(name, input, opts = {}) {
-  const { onDiffRequest, allowedCommands, terminalTimeout } = opts;
+  const { onDiffRequest, onWriteAccessRequest, allowedCommands, terminalTimeout } = opts;
 
   switch (name) {
 
@@ -156,13 +182,20 @@ async function executeTool(name, input, opts = {}) {
     case 'write_file': {
       const full = resolvePath(input.path);
       let before = '';
-      try { before = fs.readFileSync(full, 'utf8'); } catch { /* new file */ }
-
-      if (onDiffRequest && before !== input.content) {
-        const id       = `diff_${Date.now()}`;
-        const accepted = await onDiffRequest(id, input.path, before, input.content);
-        if (!accepted) return `Edit rejected by user: ${input.path}`;
+      let exists = true;
+      try { before = fs.readFileSync(full, 'utf8'); }
+      catch (err) {
+        if (err.code !== 'ENOENT') throw err;
+        exists = false;
       }
+
+      if (exists && before === input.content) return `No changes needed: ${input.path}`;
+      if (!onWriteAccessRequest || !await onWriteAccessRequest()) {
+        return `Write access denied: ${input.path}`;
+      }
+      const id       = `diff_${Date.now()}`;
+      const accepted = await onDiffRequest?.(id, input.path, before, input.content);
+      if (!accepted) return `Edit rejected by user: ${input.path}`;
 
       fs.mkdirSync(path.dirname(full), { recursive: true });
       fs.writeFileSync(full, input.content, 'utf8');
@@ -177,11 +210,13 @@ async function executeTool(name, input, opts = {}) {
       }
       const newContent = content.replace(input.old_text, input.new_text);
 
-      if (onDiffRequest) {
-        const id       = `diff_${Date.now()}`;
-        const accepted = await onDiffRequest(id, input.path, content, newContent);
-        if (!accepted) return `Edit rejected by user: ${input.path}`;
+      if (content === newContent) return `No changes needed: ${input.path}`;
+      if (!onWriteAccessRequest || !await onWriteAccessRequest()) {
+        return `Write access denied: ${input.path}`;
       }
+      const id       = `diff_${Date.now()}`;
+      const accepted = await onDiffRequest?.(id, input.path, content, newContent);
+      if (!accepted) return `Edit rejected by user: ${input.path}`;
 
       fs.writeFileSync(full, newContent, 'utf8');
       return `Edited ${input.path}`;
@@ -261,7 +296,7 @@ async function executeTool(name, input, opts = {}) {
 // ── Agentic loop ─────────────────────────────────────────────────────────────
 
 /**
- * Run Claude with file + terminal tools until it produces a final answer.
+ * Run Claude with workspace tools until it produces a final answer.
  *
  * @param {Array}    history          Conversation so far [{role, content}]
  * @param {string}   system           System prompt string
@@ -339,4 +374,59 @@ async function runAgent(history, system, onToken, onTool, onDone, onDiffRequest,
   onDone(fullText);
 }
 
-module.exports = { runAgent };
+function toKimiTools() {
+  return TOOLS.map(tool => ({
+    type: 'function',
+    function: {
+      name: tool.name,
+      description: tool.description,
+      parameters: tool.input_schema,
+    },
+  }));
+}
+
+/**
+ * Run Kimi with the same workspace tools and per-change review used by Claude.
+ */
+async function runKimiAgent(history, system, onToken, onTool, onDone, onDiffRequest, toolOpts) {
+  const messages = [
+    { role: 'system', content: system },
+    ...history.filter(m => m.role === 'user' || m.role === 'assistant')
+      .map(m => ({ role: m.role, content: m.content })),
+  ];
+  const tools = toKimiTools();
+  let fullText = '';
+
+  for (let i = 0; i < 10; i++) {
+    const response = await streamKimi(messages, onToken, tools);
+    fullText += response.text;
+    if (!response.toolCalls.length) break;
+
+    messages.push({
+      role: 'assistant',
+      content: response.text || null,
+      tool_calls: response.toolCalls,
+    });
+
+    for (const call of response.toolCalls) {
+      const name = call.function.name;
+      let result;
+      try {
+        const input = JSON.parse(call.function.arguments);
+        onTool(name, input);
+        result = await executeTool(name, input, { onDiffRequest, ...toolOpts });
+      } catch (err) {
+        result = `Error: ${err.message}`;
+      }
+      messages.push({
+        role: 'tool',
+        tool_call_id: call.id,
+        content: Array.isArray(result) ? JSON.stringify(result) : String(result),
+      });
+    }
+  }
+
+  onDone(fullText);
+}
+
+module.exports = { executeTool, runAgent, runKimiAgent };

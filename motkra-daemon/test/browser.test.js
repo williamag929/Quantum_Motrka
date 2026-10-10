@@ -34,3 +34,10 @@ test('secrets are never typed into websites', async () => {
     /does not type secrets/
   );
 });
+
+test('follow-ups about a page go to the model with tools', () => {
+  assert.equal(ipc.needsTools('puedes mostrarme la pagina projects'), true);
+  assert.equal(ipc.needsTools('y qué dice abajo?', true), true);       // browser window open
+  assert.equal(ipc.needsTools('y qué dice abajo?', false), false);
+  assert.equal(ipc.needsTools('¿Cuál es la capital de Francia?'), false);
+});

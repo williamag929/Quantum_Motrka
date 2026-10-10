@@ -125,3 +125,9 @@ test('environment secrets do not reach the command output', async () => {
   delete process.env.MOTKRA_TEST_API_KEY;
   assert.ok(!out.includes('sk-should-not-leak'));
 });
+
+test('the approval prompt shows the command exactly as it will run', () => {
+  const job = consoleTools.prepare({ command: 'node -e "console.log(1)" "two words"', cwd });
+  assert.equal(job.command, 'node -e console.log(1) "two words"');
+  assert.deepEqual(job.args, ['-e', 'console.log(1)', 'two words']);
+});

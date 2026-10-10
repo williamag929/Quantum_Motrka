@@ -179,12 +179,13 @@ class Daemon:
 
     def warm_up(self) -> None:
         """Load the local model and Whisper in the background so the first question is fast."""
-        try:
-            import ollama
+        if os.getenv("MOTKRA_SKIP_LOCAL_WARMUP") != "1":  # Ollama paused in the Electron app's settings
+            try:
+                import ollama
 
-            ollama.generate(model=GEMMA_MODEL, prompt="")  # empty prompt = load only
-        except Exception as exc:
-            log.warning("could not preload %s: %s", GEMMA_MODEL, exc)
+                ollama.generate(model=GEMMA_MODEL, prompt="")  # empty prompt = load only
+            except Exception as exc:
+                log.warning("could not preload %s: %s", GEMMA_MODEL, exc)
         if self.transcriber:
             try:
                 self.transcriber.load()

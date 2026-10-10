@@ -5,6 +5,8 @@ const fsTools = require('./fs-tools');
 const brain   = require('./brain');
 const consoleTools = require('./console-tools');
 const browser = require('./browser');
+const settings = require('./settings');
+const kimi = require('./kimi');
 
 let _server = null;
 
@@ -187,8 +189,12 @@ const ACTION_RE = new RegExp([
   String.raw`\b(pytest|python|node)\s+[\w.-]+\.(py|js|mjs|ts)\b`,
 ].join('|'), 'i');
 
-function needsTools(text) {
-  return PATH_RE.test(text) || ACTION_RE.test(text);
+// Follow-ups about what is on screen ("muéstrame la página projects") have no URL or verb to match.
+const PAGE_RE = /\b(p[aá]gina|sitio|web|website|webpage|page|enlace|link|pesta[nñ]a|tab|bot[oó]n|button|formulario|form)\b/i;
+
+/** @param {boolean} browsing  the Motkra Browser window is open: follow-ups are about it */
+function needsTools(text, browsing = false) {
+  return PATH_RE.test(text) || ACTION_RE.test(text) || PAGE_RE.test(text) || browsing;
 }
 
 /**
@@ -201,35 +207,83 @@ function needsTools(text) {
  * @param {Function} onModel  Called once with the chosen model name before first token
  * @param {object}   agent    { ask, onActivity } to enable filesystem tools (chat window only)
  */
+/** Kimi (NVIDIA): same privacy handling as Claude, no tools. */
+async function handleKimiStream(messages, onToken, privacy = null) {
+  const restorer = new brain.StreamRestorer(privacy?.secrets ?? {});
+  let full = '';
+  const emit = t => { if (t) { onToken(t); full += t; } };
+  await kimi.streamKimi(messages, SYSTEM + (privacy?.note ?? ''), t => emit(restorer.feed(t)));
+  emit(restorer.flush());
+  return full;
+}
+
+const TARGET_OF = { gemma: 'local', claude: 'cloud', kimi: 'kimi' };
+
+/**
+ * Route and stream a response.
+ *
+ * The privacy brain decides local vs cloud and prepares the payload; ⚙ Settings decide which
+ * providers may answer (settings.pickProvider). When the provider changes the destination,
+ * the brain prepares the payload again for it, so a cloud model always gets a redacted
+ * conversation without private turns. Private conversations never move to the cloud.
+ *
+ * @param {string}   text     User message
+ * @param {Array}    history  [{role, content, private?}]
+ * @param {Function} onToken  Called for each streamed text chunk
+ * @param {string}   model    'auto' | 'claude' | 'gemma' | 'kimi'
+ * @param {Function} onModel  Called once with the chosen engine before first token
+ * @param {object}   agent    { ask, onActivity } to enable agent tools (chat window only)
+ * @param {Function} onRoute  Called once with { target, reason, private, redacted }
+ */
 async function handleQueryStream(text, history, onToken, model = 'auto', onModel = null, agent = null, onRoute = null) {
   const prior = (Array.isArray(history) ? history : [])
     .filter(m => (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string');
-  let plan = await brain.plan([...prior, { role: 'user', content: text }], model);
+  const conversation = [...prior, { role: 'user', content: text }];
+  const forced = ['gemma', 'claude', 'kimi'].includes(model) ? model : null;
+  // The local model has no tools: a request to act (run, open, browse…) wants Claude.
+  const wantsTools = !!agent && needsTools(text, browser.isOpen());
 
-  // The local model has no tools: a request to act (run, open, browse…) from the chat window
-  // goes to Claude, redacted as usual. Private conversations stay local regardless.
-  if (plan && agent && model === 'auto' && plan.target === 'local' && !plan.private && needsTools(text)) {
-    plan = await brain.plan([...prior, { role: 'user', content: text }], 'claude') ?? plan;
-    if (plan.target === 'cloud') plan.reason = 'needs tools';
+  let plan = await brain.plan(conversation, model);
+  const brainUp = !!plan;
+  if (!plan) {
+    // Brain unavailable: basic keyword router, no redaction. A conversation already marked
+    // private never falls back to the cloud.
+    const wasPrivate = prior.some(m => m.private);
+    const guess = forced ?? (wasPrivate ? 'gemma' : route(text));
+    plan = {
+      target: TARGET_OF[guess], private: wasPrivate, redacted: false, reason: 'basic router (privacy brain offline)',
+      messages: conversation.map(m => ({ role: m.role, content: m.content })), system: SYSTEM, secrets: null,
+    };
+  }
+  // `plan.target` is what the payload was prepared for; `routed` may differ (tools need Claude).
+  let routed = plan;
+  if (!forced && wantsTools && plan.target === 'local' && !plan.private) routed = { ...plan, target: 'cloud', reason: 'needs tools' };
+
+  const pick = settings.pickProvider(routed, {
+    available: settings.available(), cloudPreference: settings.load().cloudPreference, forced, wantsTools,
+  });
+  if (pick.blocked) {
+    onModel?.('none');
+    onRoute?.({ target: 'none', reason: 'blocked by settings', private: routed.private, redacted: false });
+    onToken(`⚙ ${pick.blocked}`);
+    return `⚙ ${pick.blocked}`;
   }
 
-  if (plan) {
-    const chosen = plan.target === 'local' ? 'gemma' : 'claude';
-    onModel?.(chosen);
-    onRoute?.({ target: chosen, reason: plan.reason, private: plan.private, redacted: plan.redacted });
-    if (chosen === 'gemma') return await handleGemmaStream(plan.messages, plan.system, onToken, plan.think);
-    return await handleClaudeStream(plan.messages, onToken, agent, { secrets: plan.secrets, note: plan.redaction_note });
+  const engine = pick.engine;
+  if (brainUp && TARGET_OF[engine] !== plan.target) {
+    const again = await brain.plan(conversation, engine);
+    // Fail closed: never send a payload prepared for another destination to the cloud.
+    if (!again && engine !== 'gemma') throw new Error('The privacy brain stopped responding; not sending to the cloud.');
+    plan = again ?? plan;
   }
+  const reason = [routed.reason, pick.note].filter(Boolean).join(' · ');
+  onModel?.(engine);
+  onRoute?.({ target: engine, reason, private: plan.private, redacted: plan.redacted });
 
-  // Brain unavailable: basic keyword router, no redaction. A conversation already marked
-  // private never falls back to the cloud.
-  const wasPrivate = prior.some(m => m.private);
-  const chosen = wasPrivate ? 'gemma' : model === 'auto' ? route(text) : model;
-  const messages = [...prior.map(m => ({ role: m.role, content: m.content })), { role: 'user', content: text }];
-  onModel?.(chosen);
-  onRoute?.({ target: chosen, reason: 'basic router (privacy brain offline)', private: wasPrivate, redacted: false });
-  if (chosen === 'gemma') return await handleGemmaStream(messages, SYSTEM, onToken);
-  return await handleClaudeStream(messages, onToken, agent);
+  const privacy = plan.secrets ? { secrets: plan.secrets, note: plan.redaction_note } : null;
+  if (engine === 'gemma') return await handleGemmaStream(plan.messages, plan.system ?? SYSTEM, onToken, plan.think);
+  if (engine === 'kimi')  return await handleKimiStream(plan.messages, onToken, privacy);
+  return await handleClaudeStream(plan.messages, onToken, agent, privacy);
 }
 
 // ── HTTP server (browser extension + VS Code extension) ───────────────────

@@ -314,12 +314,17 @@ async function runTool(name, input, { ask, onActivity } = {}) {
   throw new Error(`Unknown tool: ${name}`);
 }
 
+/** The browser window is open on screen (the user is in a browsing session). */
+function isOpen() {
+  return !!win && !win.isDestroyed() && win.isVisible();
+}
+
 function close() {
   if (win && !win.isDestroyed()) win.destroy();
   win = null;
 }
 
 module.exports = {
-  TOOLS, NAMES, runTool, close, normalizeUrl, originOf, wrap, pageSnapshot, pageTarget,
+  TOOLS, NAMES, runTool, close, isOpen, normalizeUrl, originOf, wrap, pageSnapshot, pageTarget,
   listGrants: () => store.list(), revokeAll: () => store.revokeAll(),
 };

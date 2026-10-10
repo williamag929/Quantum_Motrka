@@ -30,6 +30,12 @@ contextBridge.exposeInMainWorld('motkra', {
   /** Check whether an API key is configured. */
   getConfig: () => ipcRenderer.invoke('get-config'),
 
+  /** Model providers (Ollama, Claude, NVIDIA): status for the ⚙ Settings panel. */
+  getSettings: () => ipcRenderer.invoke('settings-get'),
+
+  /** Save { providers: {local, claude, nvidia}, cloudPreference }; resolves to the new status. */
+  saveSettings: update => ipcRenderer.invoke('settings-set', update),
+
   /**
    * Fires once per query with the model name chosen by the router.
    * @param {(model:'claude'|'gemma') => void} cb

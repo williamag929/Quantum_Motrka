@@ -22,7 +22,7 @@ if (!process.env.ANTHROPIC_API_KEY) {
 }
 
 const { route }             = require('./router');
-const { runAgent }          = require('./agent');
+const { runAgent, runKimiAgent } = require('./agent');
 const { askGemma }          = require('./clients/gemma');
 const { loadAgents }        = require('./agents');
 const { scan: scanPrivacy } = require('./core/privacy-scanner');
@@ -95,6 +95,7 @@ class MoktaProvider {
     this._agents           = [{ id: 'default', name: 'Default', description: 'Built-in coding agent', systemPrompt: null }];
     this._activeAgent      = 'default';
     this._pendingDiffs      = new Map();
+    this._writeAccessDecisions = new Map();
     this._currentLocalModel = null;
     this._sttDispose        = null;  // active STT session dispose fn
     this._ttsMuted          = false;
@@ -120,6 +121,20 @@ class MoktaProvider {
 
   get _activeHistory() {
     return this._sessions.get(this._activeSessId)?.history ?? [];
+  }
+
+  async _requestWriteAccess() {
+    const workspace = fs.realpathSync(this._workspace);
+    if (this._writeAccessDecisions.has(workspace)) return this._writeAccessDecisions.get(workspace);
+    const answer = await vscode.window.showWarningMessage(
+      `Allow Motkra to create and modify files in ${workspace} for this VS Code session? ` +
+      `You will still review and approve each change.`,
+      { modal: true },
+      'Allow for this session'
+    );
+    const granted = answer === 'Allow for this session';
+    this._writeAccessDecisions.set(workspace, granted);
+    return granted;
   }
 
   // ── Session helpers ──────────────────────────────────────────────────
@@ -358,6 +373,7 @@ class MoktaProvider {
     // ── Route ──────────────────────────────────────────────────────────
     const model = forcedLocal ? 'local'
       : mode === 'cloud' ? 'cloud'
+      : mode === 'kimi' ? 'kimi'
       : mode === 'local' ? 'local'
       : route(userText);
 
@@ -370,10 +386,11 @@ class MoktaProvider {
     const toolOpts   = {
       allowedCommands: cfg.get('allowedCommands'),
       terminalTimeout: cfg.get('terminalTimeout'),
+      onWriteAccessRequest: () => this._requestWriteAccess(),
     };
 
-    // ── RAG context (Phase 6) — inject relevant files for Claude ──────────
-    if (model === 'cloud' && cfg.get('workspaceIndex', true) && indexer.isReady()) {
+    // ── RAG context (Phase 6) — inject relevant files for cloud agents ────
+    if ((model === 'cloud' || model === 'kimi') && cfg.get('workspaceIndex', true) && indexer.isReady()) {
       const hits = indexer.query(userText, 3);
       if (hits.length > 0) {
         const ragBlock = 'Relevant workspace files:\n\n' + hits.map(h =>
@@ -389,6 +406,10 @@ class MoktaProvider {
     this._post(s({ type: 'start' }));
 
     try {
+      const onDiffRequest = async (id, filePath, before, after) => {
+        this._post(s({ type: 'diff-request', id, path: filePath, before, after }));
+        return new Promise(res => this._pendingDiffs.set(id, res));
+      };
       if (model === 'cloud') {
         await runAgent(
           sess.history,
@@ -396,11 +417,18 @@ class MoktaProvider {
           token       => this._post(s({ type: 'token', text: token })),
           (name, inp) => this._post(s({ type: 'tool',  name, input: JSON.stringify(inp) })),
           full        => sess.history.push({ role: 'assistant', content: full }),
-          async (id, filePath, before, after) => {
-            this._post(s({ type: 'diff-request', id, path: filePath, before, after }));
-            return new Promise(res => this._pendingDiffs.set(id, res));
-          },
+          onDiffRequest,
           null,   // cloud calls don't contribute to savings
+          toolOpts
+        );
+      } else if (model === 'kimi') {
+        await runKimiAgent(
+          sess.history,
+          this._systemPrompt,
+          token => this._post(s({ type: 'token', text: token })),
+          (name, inp) => this._post(s({ type: 'tool', name, input: JSON.stringify(inp) })),
+          full => sess.history.push({ role: 'assistant', content: full }),
+          onDiffRequest,
           toolOpts
         );
       } else {

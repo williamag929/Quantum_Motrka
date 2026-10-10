@@ -61,7 +61,11 @@ async function start() {
   }
   _proc = spawn(PYTHON, [SCRIPT, '--headless'], {
     cwd: path.dirname(SCRIPT),
-    env: { ...process.env, DAEMON_PORT: String(PORT) },
+    env: {
+      ...process.env, DAEMON_PORT: String(PORT),
+      // Ollama paused in ⚙ Settings: don't load the local model into memory at startup.
+      ...(require('./settings').load().providers.local ? {} : { MOTKRA_SKIP_LOCAL_WARMUP: '1' }),
+    },
     stdio: ['ignore', 'ignore', 'pipe'],
     windowsHide: true,
   });
@@ -79,7 +83,7 @@ function stop() {
   if (_proc) { try { _proc.kill(); } catch {} _proc = null; }
 }
 
-const MODE = { auto: 'auto', claude: 'cloud', gemma: 'local' };
+const MODE = { auto: 'auto', claude: 'cloud', gemma: 'local', kimi: 'kimi' };
 
 /**
  * Routing decision for a conversation ending with the new user message.

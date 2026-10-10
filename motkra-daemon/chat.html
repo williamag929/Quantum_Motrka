@@ -79,7 +79,7 @@
     gap: 4px;
     -webkit-app-region: no-drag;
   }
-  #vscode-btn, #close-btn, #tts-btn, #clear-btn {
+  #settings-btn, #vscode-btn, #close-btn, #tts-btn, #clear-btn {
     background: none;
     border: none;
     color: var(--fg);
@@ -392,6 +392,33 @@
   #perm-modal p { font-size: 11px; color: var(--fg-dim); line-height: 1.5; }
   #perm-actions { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 6px; margin-top: 4px; }
   #perm-actions button[hidden] { display: none; }
+
+  /* ── Settings panel (model providers) ── */
+  #settings-btn:hover { opacity: 1; background: var(--bg3); color: var(--fg); }
+  #settings-overlay {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,.6); z-index: 105;
+    align-items: center; justify-content: center; -webkit-app-region: no-drag;
+  }
+  #settings-overlay.visible { display: flex; }
+  #settings-modal {
+    background: var(--bg2); border: 1px solid var(--border); border-radius: 10px;
+    padding: 16px 18px 14px; width: 400px; max-width: calc(100vw - 24px);
+    display: flex; flex-direction: column; gap: 10px; box-shadow: 0 8px 32px rgba(0,0,0,.5);
+  }
+  #settings-modal h3 { margin: 0; font-size: 14px; }
+  #settings-modal .hint { margin: 0; font-size: 11px; color: var(--fg-dim); line-height: 1.4; }
+  .provider {
+    display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; align-items: center;
+    padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg);
+  }
+  .provider input { grid-row: span 2; width: 16px; height: 16px; accent-color: var(--teal); }
+  .provider .name { font-size: 13px; }
+  .provider .meta { font-size: 11px; color: var(--fg-dim); font-family: 'Cascadia Code', 'Consolas', monospace; }
+  .provider.unconfigured { opacity: .55; }
+  #cloud-pref { display: flex; gap: 14px; font-size: 12px; align-items: center; }
+  #cloud-pref label { display: flex; gap: 5px; align-items: center; }
+  #settings-close { align-self: flex-end; padding: 6px 14px; border-radius: 5px; border: 1px solid var(--teal);
+                    background: var(--teal); color: #111; cursor: pointer; font-size: 12px; }
   #perm-folder { white-space: pre-wrap; word-break: break-all; }
   #perm-actions button {
     padding: 7px 0;
@@ -417,6 +444,7 @@
     <span id="listen-dot" title="Listening…"></span>
   </div>
   <div id="titlebar-right">
+    <button id="settings-btn" title="Settings: models">⚙</button>
     <button id="vscode-btn" title="Open VS Code">⌨</button>
     <button id="tts-btn"    title="Voice responses: OFF">🔊</button>
     <button id="clear-btn"  title="Clear conversation">↺ clear</button>
@@ -447,6 +475,22 @@
       <button id="mic-allow">Allow</button>
       <button id="mic-deny">Not now</button>
     </div>
+  </div>
+</div>
+
+<!-- Settings: which model providers Motkra may use -->
+<div id="settings-overlay">
+  <div id="settings-modal" role="dialog" aria-labelledby="settings-title">
+    <h3 id="settings-title">⚙ Models</h3>
+    <div id="provider-list"></div>
+    <div id="cloud-pref">
+      <span>Preferred cloud:</span>
+      <label><input type="radio" name="cloud-pref" value="claude"> Claude</label>
+      <label><input type="radio" name="cloud-pref" value="nvidia"> NVIDIA</label>
+    </div>
+    <p class="hint">Pausing Ollama frees its memory. Private conversations only run on Ollama: while it is paused
+      Motkra tells you instead of sending them to the cloud. Files, console and browser tools only work with Claude.</p>
+    <button id="settings-close">Done</button>
   </div>
 </div>
 
@@ -487,7 +531,7 @@ const noKeyBanner= document.getElementById('no-key-banner');
 let history      = [];
 let curBubble    = null;
 let busy         = false;
-let _modelForce  = 'auto'; // 'auto' | 'claude' | 'gemma'
+let _modelForce  = 'auto'; // 'auto' | 'claude' | 'gemma' | 'kimi'
 
 const modelBadge = document.getElementById('model-badge');
 
@@ -497,17 +541,59 @@ window.motkra.getConfig().then(cfg => {
 });
 
 // ── Model badge ───────────────────────────────────────────────────────────
+const BADGES = {
+  gemma:  { text: '🏠 Gemma',  bg: '#1a3a1a', fg: '#89d185' },
+  claude: { text: '☁ Claude', bg: '',        fg: '' },
+  kimi:   { text: '⚡ Kimi',   bg: '#2e2440', fg: '#c5a3ff' },
+  none:   { text: '⚙ Off',    bg: '#3a2a1a', fg: '#e0b070' },
+};
+
 function setBadge(model) {
-  if (model === 'gemma') {
-    modelBadge.textContent = '🏠 Gemma';
-    modelBadge.style.background = '#1a3a1a';
-    modelBadge.style.color      = '#89d185';
-  } else {
-    modelBadge.textContent = '☁ Claude';
-    modelBadge.style.background = '';
-    modelBadge.style.color      = '';
-  }
+  const b = BADGES[model] ?? BADGES.claude;
+  modelBadge.textContent      = b.text;
+  modelBadge.style.background = b.bg;
+  modelBadge.style.color      = b.fg;
 }
+
+// ── Settings panel ────────────────────────────────────────────────────────
+const settingsOverlay = document.getElementById('settings-overlay');
+const providerList    = document.getElementById('provider-list');
+const PROVIDER_ICON   = { local: '🏠', claude: '☁', nvidia: '⚡' };
+
+function renderSettings(status) {
+  providerList.replaceChildren(...status.providers.map(p => {
+    const row = document.createElement('label');
+    row.className = 'provider' + (p.configured ? '' : ' unconfigured');
+    const box = document.createElement('input');
+    box.type = 'checkbox';
+    box.checked = p.enabled && p.configured;
+    box.disabled = !p.configured;
+    box.addEventListener('change', async () => {
+      renderSettings(await window.motkra.saveSettings({ providers: { [p.id]: box.checked } }));
+    });
+    const name = document.createElement('span');
+    name.className = 'name';
+    name.textContent = `${PROVIDER_ICON[p.id] ?? ''} ${p.label}`;
+    const meta = document.createElement('span');
+    meta.className = 'meta';
+    meta.textContent = p.configured ? `${p.model} · ${p.enabled ? 'on' : 'paused'}` : `add ${p.needs} to dual_ai/.env`;
+    row.append(box, name, meta);
+    return row;
+  }));
+  document.querySelectorAll('input[name="cloud-pref"]').forEach(r => { r.checked = r.value === status.cloudPreference; });
+}
+
+async function openSettings() {
+  renderSettings(await window.motkra.getSettings());
+  settingsOverlay.classList.add('visible');
+}
+
+document.getElementById('settings-btn').addEventListener('click', openSettings);
+document.getElementById('settings-close').addEventListener('click', () => settingsOverlay.classList.remove('visible'));
+settingsOverlay.addEventListener('click', e => { if (e.target === settingsOverlay) settingsOverlay.classList.remove('visible'); });
+document.querySelectorAll('input[name="cloud-pref"]').forEach(r => r.addEventListener('change', async () => {
+  renderSettings(await window.motkra.saveSettings({ cloudPreference: r.value }));
+}));
 
 window.motkra.onModelSelected(model => setBadge(model));
 
@@ -518,6 +604,9 @@ window.motkra.onRouteInfo(info => {
   _route = info;
   if (info.private) modelBadge.textContent += ' 🔒';
   modelBadge.title = info.reason || '';
+  // The bubble is created before routing; label it with the model that actually answers.
+  const lbl = curBubble?.parentNode?.querySelector('.label');
+  if (lbl) { lbl.textContent = modelBadge.textContent; lbl.title = info.reason || ''; }
 });
 
 // ── Register token stream handler once ───────────────────────────────────
@@ -857,6 +946,19 @@ async function send() {
     inputEl.value = '';
     const b = addBubble('assistant', 'Motkra');
     b.textContent = '☁ Switched to Claude — all messages go to the cloud until you type /auto or /local.';
+    return;
+  }
+  if (text === '/kimi') {
+    _modelForce = 'kimi';
+    setBadge('kimi');
+    inputEl.value = '';
+    const b = addBubble('assistant', 'Motkra');
+    b.textContent = '⚡ Switched to Kimi (NVIDIA) — all messages go to NVIDIA until you type /auto, /local or /cloud.';
+    return;
+  }
+  if (text === '/settings') {
+    inputEl.value = '';
+    openSettings();
     return;
   }
   if (text === '/folders' || text === '/permissions') {

@@ -53,6 +53,11 @@ function tokenize(command) {
   return argv;
 }
 
+/** The command as the user approves it: arguments with spaces stay visibly quoted. */
+function displayCommand(argv) {
+  return argv.map(a => (a === '' || /[\s"]/.test(a) ? `"${a.replace(/"/g, '\\"')}"` : a)).join(' ');
+}
+
 // cmd.exe built-ins have no executable to run without a shell.
 const BUILTINS = new Set(['dir', 'type', 'echo', 'copy', 'move', 'del', 'erase', 'ren', 'rename', 'md', 'mkdir',
   'rd', 'rmdir', 'cls', 'set', 'cd', 'chdir', 'start', 'mklink', 'pushd', 'popd', 'ver', 'vol', 'assoc', 'ftype']);
@@ -211,7 +216,7 @@ function prepare(input) {
   }
   const file = resolveProgram(argv[0]);
   if (!file) throw new Error(`Program not found on PATH: ${argv[0]}`);
-  return { file, args: argv.slice(1), tier: classify(argv), command: argv.join(' '), cwd, shell: 'none' };
+  return { file, args: argv.slice(1), tier: classify(argv), command: displayCommand(argv), cwd, shell: 'none' };
 }
 
 /**

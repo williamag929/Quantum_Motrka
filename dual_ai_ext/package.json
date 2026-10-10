@@ -1,7 +1,7 @@
 {
   "name": "motkra",
   "displayName": "Motkra",
-  "description": "Privacy-first AI coding agent — Claude (cloud) + any local model via Ollama",
+  "description": "Privacy-first AI coding agent — Claude, Kimi (NVIDIA), and local models via Ollama",
   "version": "0.1.0",
   "publisher": "local",
   "engines": { "vscode": "^1.80.0" },

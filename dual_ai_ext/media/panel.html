@@ -770,11 +770,12 @@
     <span id="ctx-lines"></span>
     <button id="ctx-detach" title="Detach context">×</button>
   </div>
-  <textarea id="input" placeholder="Ask anything… Claude edits files, Gemma answers fast." rows="3"></textarea>
+  <textarea id="input" placeholder="Ask anything… Claude edits files, Kimi answers, Gemma runs locally." rows="3"></textarea>
   <div id="toolbar">
     <div id="model-switcher">
       <button id="sw-auto"  class="active" title="Auto-route based on message">⚡ Auto</button>
       <button id="sw-cloud" title="Always use Claude">☁ Claude</button>
+      <button id="sw-kimi"  title="Always use Kimi through NVIDIA; can edit files after approval">⚡ Kimi</button>
       <button id="sw-local" title="Always use local Gemma">⬡ Local</button>
     </div>
     <div style="display:flex;gap:4px;align-items:center">
@@ -1137,7 +1138,12 @@ function addToolCallToPane(pane, name, input) {
 agentSelect.addEventListener('change', () => vscode.postMessage({ type: 'agent', id: agentSelect.value }));
 
 // ── Model switcher ────────────────────────────────────────────────────────
-const swBtns = { auto: document.getElementById('sw-auto'), cloud: document.getElementById('sw-cloud'), local: document.getElementById('sw-local') };
+const swBtns = {
+  auto: document.getElementById('sw-auto'),
+  cloud: document.getElementById('sw-cloud'),
+  kimi: document.getElementById('sw-kimi'),
+  local: document.getElementById('sw-local')
+};
 Object.entries(swBtns).forEach(([mode, btn]) => {
   btn.addEventListener('click', () => {
     modelMode = mode;
@@ -1232,10 +1238,15 @@ window.addEventListener('message', ev => {
     case 'model':
       // Update badge only if this is for the active session
       if (!sid || sid === activeSessId) {
-        badge.textContent = msg.model === 'cloud' ? '☁ Claude' : '🏠 Gemma 4';
-        badge.style.background = msg.model === 'cloud'
-          ? 'var(--vscode-statusBarItem-remoteBackground, #007acc)'
-          : 'var(--vscode-statusBarItem-prominentBackground, #388a34)';
+        const badges = {
+          cloud: { text: '☁ Claude', background: 'var(--vscode-statusBarItem-remoteBackground, #007acc)' },
+          kimi:  { text: '⚡ Kimi', background: '#2e2440' },
+          local: { text: '🏠 Gemma 4', background: 'var(--vscode-statusBarItem-prominentBackground, #388a34)' }
+        };
+        const selected = badges[msg.model] ?? badges.local;
+        badge.textContent = selected.text;
+        badge.style.background = selected.background;
+        badge.style.color = msg.model === 'kimi' ? '#c5a3ff' : '';
       }
       break;
 
@@ -1369,7 +1380,7 @@ window.addEventListener('message', ev => {
       inputEl.value = msg.text;
       inputEl.style.fontStyle = '';
       inputEl.style.opacity   = '';
-      inputEl.placeholder     = 'Ask anything… Claude edits files, Gemma answers fast.';
+      inputEl.placeholder     = 'Ask anything… Claude edits files, Kimi answers, Gemma runs locally.';
       isRecording = false;
       micBtn.classList.remove('recording');
       micBtn.title = 'Voice input';
@@ -1383,7 +1394,7 @@ window.addEventListener('message', ev => {
       micBtn.title = 'Voice input';
       inputEl.style.fontStyle = '';
       inputEl.style.opacity   = '';
-      inputEl.placeholder     = 'Ask anything… Claude edits files, Gemma answers fast.';
+      inputEl.placeholder     = 'Ask anything… Claude edits files, Kimi answers, Gemma runs locally.';
       break;
 
     // ── Plan overlay (Phase 10) ───────────────────────────────────────
