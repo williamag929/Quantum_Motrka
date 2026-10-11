@@ -4,10 +4,23 @@ from typing import Callable, Optional
 
 import requests
 
-from config import KIMI_MODEL, SYSTEM_PROMPT
+from config import KIMI_MODEL, KIMI_TEMPERATURE, KIMI_TOP_P, SYSTEM_PROMPT
 from reply import Reply
 
 KIMI_INVOKE_URL = "https://integrate.api.nvidia.com/v1/chat/completions"
+
+
+def fold_system(system: str, messages: list[dict]) -> list[dict]:
+    """NVIDIA's Kimi K3 answers with garbage ("@ @ @...", empty content) whenever the request has a
+    system message. Put the instructions at the start of the first user message instead; it keeps
+    the model's reasoning, unlike turning thinking off."""
+    text = (system or "").strip()
+    if not text:
+        return messages
+    for i, m in enumerate(messages):
+        if m["role"] == "user" and isinstance(m["content"], str):
+            return messages[:i] + [{**m, "content": f"Instructions:\n{text}\n\n---\n\n{m['content']}"}] + messages[i + 1:]
+    return [{"role": "user", "content": f"Instructions:\n{text}"}] + messages
 
 
 def generate(
@@ -22,9 +35,11 @@ def generate(
 
     payload = {
         "model": KIMI_MODEL,
-        "messages": [{"role": "system", "content": system}] + messages,
+        "messages": fold_system(system, messages),
         "max_tokens": max_tokens,
-        "temperature": 1.0,
+        # NVIDIA's Kimi K3 produces gibberish at temperature 1.0 (empty content, random reasoning tokens).
+        "temperature": KIMI_TEMPERATURE,
+        "top_p": KIMI_TOP_P,
         "stream": True,
         "stream_options": {"include_usage": True},
     }
@@ -50,6 +65,8 @@ def generate(
                     if on_text:
                         on_text(piece)
                     text += piece
+    if not text.strip():
+        raise RuntimeError("Kimi (NVIDIA) returned an empty answer. Try again, or check KIMI_MODEL / KIMI_TEMPERATURE.")
     return Reply(text, in_tok, out_tok)
 
 

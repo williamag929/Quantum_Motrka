@@ -8,6 +8,19 @@ const https = require('https');
 const URL_ = new URL('https://integrate.api.nvidia.com/v1/chat/completions');
 
 /**
+ * NVIDIA's Kimi K3 answers with garbage ("@ @ @…", empty content) whenever the request has a
+ * system message. Put the instructions at the start of the first user message instead; it keeps
+ * the model's reasoning, unlike turning thinking off.
+ */
+function foldSystem(system, messages) {
+  const text = String(system ?? '').trim();
+  if (!text) return messages;
+  const i = messages.findIndex(m => m.role === 'user' && typeof m.content === 'string');
+  if (i === -1) return [{ role: 'user', content: `Instructions:\n${text}` }, ...messages];
+  return messages.map((m, j) => (j === i ? { ...m, content: `Instructions:\n${text}\n\n---\n\n${m.content}` } : m));
+}
+
+/**
  * @param {Array}    messages  prepared payload (redacted by the brain)
  * @param {string}   system
  * @param {Function} onToken
@@ -18,9 +31,11 @@ function streamKimi(messages, system, onToken) {
   if (!key) return Promise.reject(new Error('NVIDIA_API_KEY is not set in dual_ai/.env'));
   const body = JSON.stringify({
     model: process.env.KIMI_MODEL || 'moonshotai/kimi-k3',
-    messages: [{ role: 'system', content: system }, ...messages],
+    messages: foldSystem(system, messages),
     max_tokens: 16384,
-    temperature: 1.0,
+    // NVIDIA's Kimi K3 produces gibberish at temperature 1.0 (empty content, random reasoning tokens).
+    temperature: parseFloat(process.env.KIMI_TEMPERATURE ?? '0.6'),
+    top_p: parseFloat(process.env.KIMI_TOP_P ?? '0.95'),
     stream: true,
   });
 
@@ -57,7 +72,10 @@ function streamKimi(messages, system, onToken) {
           } catch { /* partial or non-JSON line */ }
         }
       });
-      res.on('end', () => resolve(full));
+      res.on('end', () => {
+        if (!full.trim()) reject(new Error('Kimi (NVIDIA) returned an empty answer. Try again, or check KIMI_MODEL / KIMI_TEMPERATURE.'));
+        else resolve(full);
+      });
       res.on('error', reject);
     });
     req.setTimeout(300_000, () => req.destroy(new Error('NVIDIA API timeout')));
@@ -66,4 +84,4 @@ function streamKimi(messages, system, onToken) {
   });
 }
 
-module.exports = { streamKimi };
+module.exports = { streamKimi, foldSystem };
