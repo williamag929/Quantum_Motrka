@@ -61,6 +61,7 @@ async function planTask(goal, model) {
  * @param {string}   [opts.model]
  * @param {number}   [opts.maxSubAgents]
  * @param {Object}   [opts.toolOpts]
+ * @param {Function} [opts.onDiffRequest]          (id, filePath, before, after) → Promise<boolean> — subtask write approval gate
  * @param {Function} [opts.isCancelled]              () → boolean
  * @param {Function} [opts.isPaused]                 (taskId) → boolean
  * @param {Function} [opts.onPauseResolved]          (taskId, resolveFn) — store resolver for later resume
@@ -105,9 +106,11 @@ async function runOrchestration(
         text  => { onTaskToken(task.id, text); },
         (n,i) => onTaskTool(task.id, n, i),
         full  => { taskOutput = full; },
-        null,   // no diff approval gate in subtasks
+        opts.onDiffRequest ?? null,   // subtask writes route through the diff-approval overlay
         null,
-        opts.toolOpts ?? {}
+        opts.toolOpts ?? {},
+        undefined,  // thinking
+        info => onTaskToken(task.id, `\n✂ Context trimmed (~${Math.round((info.droppedChars ?? 0) / 1000)}k chars of old tool output omitted) to stay in the model's window.\n`)
       );
       onTaskDone(task.id, taskOutput);
       priorContext += `\n\n### ${task.title}\n${taskOutput.slice(0, 800)}`;

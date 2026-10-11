@@ -79,6 +79,11 @@
           "default": 30,
           "description": "Timeout in seconds for the run_command agent tool."
         },
+        "motkra.maxAgentIterations": {
+          "type": "number",
+          "default": 25,
+          "description": "Maximum tool-using steps per agent turn before it stops. Raise it for long multi-file tasks that would otherwise be cut off at the limit."
+        },
         "motkra.allowedCommands": {
           "type": "array",
           "items": { "type": "string" },

@@ -24,7 +24,7 @@ Target: 1,000 GitHub stars. Timeline: ~8 weeks.
 - [x] **1A-1** Add `pendingEdits` queue to `agent.js` — when Claude calls `write_file` or `str_replace`, compute unified diff and post `{type:'diff-request', id, path, before, after}` to the webview instead of writing immediately
 - [x] **1A-2** Add diff UI to `panel.html` — render unified diff with syntax highlight, Accept / Reject buttons
 - [x] **1A-3** Handle `diff-accept` / `diff-reject` messages in `extension.js` — apply or discard the pending edit
-- [ ] **1A-4** Add "Apply all" and "Reject all" buttons for multi-file edits
+- [x] **1A-4** Multi-file approvals solved the Cline way instead of an "Apply all" batch: a 🛡 **Auto-approve** popover in the panel with per-category toggles (Read files, Edit files, Execute commands, Fetch web). Backend state lives in `extension.js` (`_autoApprove`, persisted in `globalState`); `agent.js` gates `read_file`/`list_files`, `run_command`, `web_search`/`fetch_url` via a new `onActionApproval`, and the "Edit files" toggle short-circuits the diff overlay. Defaults preserve prior behaviour (read/web/commands ON, edit OFF). When a category is off, `_requestActionApproval` prompts natively with "Allow once / Allow for this session". A true batch "Apply all/Reject all" for a queue of diffs is still possible later if wanted
 
 ### 1B — Terminal Tool
 - [x] **1B-1** Add `run_command` tool definition to `agent.js` tool registry
@@ -392,6 +392,24 @@ Principles:
 - [ ] **19B-4** Address bar and tabs for the user; screenshot tool (vision)
 - [ ] **19B-5** Password vault: import the browser's exported CSV, encrypt with `safeStorage`, fill by code on the exact origin only — passwords never reach any model
 - [ ] **19B-6** Let the local model use tools (needs a Gemma tool-calling evaluation)
+
+---
+
+## Phase 20 — Agent UX & Autonomy Polish
+*Close the gap to a production autonomous agent: the reasoning stays out of the way, the answer leads, and the loop behaves predictably.*
+
+### 20A — Collapsible thinking / reasoning
+- [x] **20A-1** `agent.js` — capture `thinking_delta` from the adaptive-thinking stream into a new `onThinking` callback (was silently dropped)
+- [x] **20A-2** `extension.js` — post `{type:'thinking'}` for the cloud agent so reasoning streams on its own channel
+- [x] **20A-3** `panel.html` — render reasoning in a collapsed `<details>` (triángulo ▸) *above* the answer bubble; expanded only on click; auto-scrolls while streaming
+- [x] **20A-4** Same treatment for Kimi reasoning (`clients/kimi.js` `onReasoning` → same collapsible block) + a "N steps" counter on the Activity header
+- [x] **20A-5** Separate "activity" lines (tool calls + pre-tool narration) from the final answer — narration is moved into the collapsed Activity block on the first tool call, so the answer bubble always leads
+
+### 20B — Agent-loop robustness
+- [x] **20B-0** Raise the hard 10-step cap: new `motkra.maxAgentIterations` setting (default 25) applies to both `runAgent` and `runKimiAgent`, so long multi-file tasks can finish instead of being cut off
+- [x] **20B-1** `str_replace` no-match now returns actionable self-correction feedback (`core/fuzzy-match.js`): distinguishes whitespace-only mismatches, shows the closest real section with line numbers (Hermes/Aider-style "did you mean?"), and tells the model to re-read and retry — instead of a bare throw. Raises no exception, so a bad `old_string` no longer aborts the whole turn
+- [x] **20B-2** Context-window guard (`core/context-guard.js`): before each request, estimates tokens and, at 80% of the model's window, collapses old tool output (Anthropic `tool_result` blocks and Kimi `role:'tool'` messages) to a one-line note while keeping the goal, the recent tail, and every `tool_use_id` — so long turns compact instead of failing mid-task. Emits a `compact` notice to the panel/activity block
+- [x] **20B-3** Cloud agent gets an explicit autonomy policy (`AUTONOMY_GUIDE` in `extension.js`): verify before claiming (run tests/build), finish the task instead of handing back a plan, self-correct on tool errors, ask only when genuinely ambiguous or destructive/irreversible, know when to stop, answer crisply, never invent. Applied to the tool-using agents (cloud, Kimi, orchestrator) via `_systemPrompt(true)` — deliberately NOT the local model, which has no tools
 
 ---
 

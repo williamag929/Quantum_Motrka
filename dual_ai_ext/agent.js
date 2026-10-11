@@ -4,6 +4,8 @@ const path  = require('path');
 const fs    = require('fs');
 const { runAllowed, tokenize } = require('./core/command');
 const { isMutatingGit } = require('./core/branch-guard');
+const { formatNoMatchHint } = require('./core/fuzzy-match');
+const { guardContext } = require('./core/context-guard');
 
 let vscode;
 try { vscode = require('vscode'); } catch { vscode = null; }
@@ -185,12 +187,19 @@ async function requestWrite(onWriteAccessRequest, target) {
 const noteOf = access => (access.message ? `\n(${access.message})` : '');
 
 async function executeTool(name, input, opts = {}) {
-  const { onDiffRequest, onWriteAccessRequest, allowedCommands, terminalTimeout } = opts;
+  const { onDiffRequest, onWriteAccessRequest, allowedCommands, terminalTimeout, onActionApproval } = opts;
+  // Cline-style per-category gate for read / web / command tools. When no callback
+  // is wired (unit tests, the daemon's own executor), fall back to allowing — so this
+  // changes nothing until the extension passes onActionApproval.
+  const approveAction = (category, describe) =>
+    onActionApproval ? onActionApproval(category, describe) : Promise.resolve(true);
   let root = opts.root ?? workspaceRoot();
 
   switch (name) {
 
     case 'read_file': {
+      if (!(await approveAction('read', `read the file ${input.path}`)))
+        return `Read not approved by user: ${input.path}`;
       return fs.readFileSync(resolvePath(input.path, root), 'utf8');
     }
 
@@ -208,7 +217,7 @@ async function executeTool(name, input, opts = {}) {
       }
 
       if (exists && before === input.content) return `No changes needed: ${input.path}${noteOf(access)}`;
-      const id       = `diff_${Date.now()}`;
+      const id       = nextDiffId();
       const accepted = await onDiffRequest?.(id, input.path, before, input.content);
       if (!accepted) return `Edit rejected by user: ${input.path}`;
 
@@ -224,12 +233,15 @@ async function executeTool(name, input, opts = {}) {
       const full    = resolvePath(input.path, root);
       const content = fs.readFileSync(full, 'utf8');
       if (!content.includes(input.old_text)) {
-        throw new Error(`Text not found in ${input.path}: "${input.old_text.slice(0, 60)}"`);
+        // Actionable self-correction feedback (whitespace vs. genuinely absent,
+        // plus the closest real section) so the model can fix old_string and retry
+        // on its own instead of failing or repeating the same bad string.
+        return formatNoMatchHint(input.old_text, content, input.path);
       }
       const newContent = content.replace(input.old_text, input.new_text);
 
       if (content === newContent) return `No changes needed: ${input.path}${noteOf(access)}`;
-      const id       = `diff_${Date.now()}`;
+      const id       = nextDiffId();
       const accepted = await onDiffRequest?.(id, input.path, content, newContent);
       if (!accepted) return `Edit rejected by user: ${input.path}`;
 
@@ -238,6 +250,8 @@ async function executeTool(name, input, opts = {}) {
     }
 
     case 'list_files': {
+      if (!(await approveAction('read', `list files in ${input.path || 'the workspace root'}`)))
+        return `Listing not approved by user: ${input.path || 'workspace root'}`;
       const dir     = input.path ? resolvePath(input.path, root) : root;
       const entries = fs.readdirSync(dir, { withFileTypes: true });
       return entries.map(e => (e.isDirectory() ? `${e.name}/` : e.name)).join('\n');
@@ -245,6 +259,8 @@ async function executeTool(name, input, opts = {}) {
 
     case 'run_command': {
       const { cmd, cwd: relCwd } = input;
+      if (!(await approveAction('commands', `run the command \`${cmd}\``)))
+        return `Command not approved by user: ${cmd}`;
       const cfg     = vscode?.workspace?.getConfiguration('motkra');
       const allowed = allowedCommands
         ?? cfg?.get('allowedCommands')
@@ -265,12 +281,16 @@ async function executeTool(name, input, opts = {}) {
     }
 
     case 'web_search': {
+      if (!(await approveAction('web', `search the web for "${input.query}"`)))
+        return `Web search not approved by user: ${input.query}`;
       const cfg      = vscode?.workspace?.getConfiguration('motkra');
       const braveKey = cfg?.get('braveSearchKey') ?? '';
       return await searchWeb(input.query, braveKey);
     }
 
     case 'fetch_url': {
+      if (!(await approveAction('web', `fetch the URL ${input.url}`)))
+        return `Fetch not approved by user: ${input.url}`;
       return await fetchUrl(input.url);
     }
 
@@ -320,6 +340,12 @@ async function executeTool(name, input, opts = {}) {
 
 // ── Agentic loop ─────────────────────────────────────────────────────────────
 
+// Monotonic diff-id counter. Timestamps alone can collide when two writes land in
+// the same millisecond (chat multi-tool turns, or subtasks in /plan); a duplicate
+// id would overwrite the pending resolver and hang that edit forever.
+let _diffSeq = 0;
+const nextDiffId = () => `diff_${Date.now()}_${++_diffSeq}`;
+
 /**
  * Run Claude with workspace tools until it produces a final answer.
  *
@@ -331,18 +357,29 @@ async function executeTool(name, input, opts = {}) {
  * @param {Function} [onDiffRequest]  Called before a file write; returns Promise<boolean>
  * @param {Function} [onUsage]        Called with {inputTokens, outputTokens} after each LLM turn
  * @param {Object}   [toolOpts]       Forwarded to executeTool (allowedCommands, terminalTimeout)
+ * @param {Function} [onThinking]     Called with adaptive-thinking text
+ * @param {Function} [onCompact]      Called with {droppedChars} when the context is auto-compacted (20B-2)
  */
-async function runAgent(history, system, onToken, onTool, onDone, onDiffRequest, onUsage, toolOpts) {
-  const messages = history
+async function runAgent(history, system, onToken, onTool, onDone, onDiffRequest, onUsage, toolOpts, onThinking, onCompact) {
+  let messages = history
     .filter(m => m.role === 'user' || m.role === 'assistant')
     .map(m => ({ role: m.role, content: m.content }));
 
   const cfg   = vscode?.workspace?.getConfiguration('motkra');
   const model = cfg?.get('claudeModel') ?? 'claude-opus-4-7';
+  const maxIterations = Math.max(1, Number(cfg?.get('maxAgentIterations') ?? 25));
 
   let fullText = '';
 
-  for (let i = 0; i < 10; i++) {
+  for (let i = 0; i < maxIterations; i++) {
+    // 20B-2: keep the request inside the model's context window instead of
+    // letting a long turn blow past it mid-task. Collapses old tool output.
+    const guard = guardContext(messages);
+    if (guard.needsCompact) {
+      messages = guard.messages;
+      onCompact?.({ droppedChars: guard.droppedChars, tokens: guard.tokens });
+    }
+
     const stream = getClient().messages.stream({
       model,
       max_tokens:    16000,
@@ -354,12 +391,13 @@ async function runAgent(history, system, onToken, onTool, onDone, onDiffRequest,
     });
 
     for await (const event of stream) {
-      if (
-        event.type === 'content_block_delta' &&
-        event.delta.type === 'text_delta'
-      ) {
+      if (event.type !== 'content_block_delta') continue;
+      if (event.delta.type === 'text_delta') {
         onToken(event.delta.text);
         fullText += event.delta.text;
+      } else if (event.delta.type === 'thinking_delta' && onThinking) {
+        // Hidden reasoning from adaptive thinking — surfaced to a collapsible block, not the answer.
+        onThinking(event.delta.thinking ?? '');
       }
     }
 
@@ -413,17 +451,26 @@ function toKimiTools() {
 /**
  * Run Kimi with the same workspace tools and per-change review used by Claude.
  */
-async function runKimiAgent(history, system, onToken, onTool, onDone, onDiffRequest, toolOpts) {
-  const messages = [
+async function runKimiAgent(history, system, onToken, onTool, onDone, onDiffRequest, toolOpts, onThinking, onCompact) {
+  let messages = [
     { role: 'system', content: system },
     ...history.filter(m => m.role === 'user' || m.role === 'assistant')
       .map(m => ({ role: m.role, content: m.content })),
   ];
   const tools = toKimiTools();
+  const cfg   = vscode?.workspace?.getConfiguration('motkra');
+  const maxIterations = Math.max(1, Number(cfg?.get('maxAgentIterations') ?? 25));
   let fullText = '';
 
-  for (let i = 0; i < 10; i++) {
-    const response = await streamKimi(messages, onToken, tools);
+  for (let i = 0; i < maxIterations; i++) {
+    // 20B-2: compact old tool output before the request overflows Kimi's context.
+    const guard = guardContext(messages, { window: 128_000 });
+    if (guard.needsCompact) {
+      messages = guard.messages;
+      onCompact?.({ droppedChars: guard.droppedChars, tokens: guard.tokens });
+    }
+
+    const response = await streamKimi(messages, onToken, tools, onThinking);
     fullText += response.text;
     if (!response.toolCalls.length) break;
 

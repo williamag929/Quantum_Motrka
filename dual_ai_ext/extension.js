@@ -37,10 +37,34 @@ const providerSettings      = require('./core/provider-settings');
 
 const DEFAULT_SYSTEM_PROMPT =
   'You are a coding agent inside VS Code. ' +
-  'You have tools to read, write, and edit files in the workspace, ' +
-  'and a run_command tool to execute shell commands. ' +
+  'You have tools to read, write, and edit files in the workspace, run shell commands, ' +
+  'search the web, and capture the editor. ' +
   'When asked to modify code, use the tools to make changes directly — ' +
   'do not just show a diff. Be concise.';
+
+// Platform-wide autonomy policy. Applied to every agent (built-in and custom) via
+// the _systemPrompt getter, so a custom agent's own prompt can never opt out of it.
+// This is the "character" of a production agent: it carries tasks to completion,
+// self-corrects, verifies its work, and only interrupts the user when it truly must.
+const AUTONOMY_GUIDE =
+  'Autonomy — how you work:\n' +
+  '- Verify before you claim. Read the relevant code or config before changing it, and after a change ' +
+  'run the relevant tests or build. If they fail, fix the cause and retry; do not declare a task done ' +
+  'until they pass or you have explained precisely why you could not run them.\n' +
+  '- Finish the task. Use the tools to carry the request through to the end — stopping halfway to hand ' +
+  'back a plan when you can simply do it is a failure. When a tool errors, read the message, adjust your ' +
+  'approach, and try again; never repeat the identical call hoping for a different result.\n' +
+  '- Ask only when it truly matters. Default to acting: pick the most reasonable interpretation and ' +
+  'proceed. Pause for one focused question ONLY when the request is genuinely ambiguous in a way that ' +
+  'leads to very different, hard-to-undo outcomes, or when a step is destructive or irreversible ' +
+  '(deleting data, force-push, dropping tables) and you cannot infer the intent. Otherwise decide and go.\n' +
+  '- Know when to stop. Once the goal is met and verified, stop. Do not keep refactoring, adding ' +
+  'unrequested features, or "improving" code beyond what was asked.\n' +
+  '- Answer crisply. The user already sees every tool call, so the final message states what you changed ' +
+  'and the result — it does not narrate each step. If you did nothing or hit a blocker, say so plainly.\n' +
+  '- Never invent. If you lack a fact, a path, or an API, look it up with your tools or state the gap; ' +
+  'do not guess file contents or behavior.\n' +
+  '- Reply in the user\'s language.';
 
 // Claude Opus 4.7 pricing — used only to compute local savings estimates
 const CLOUD_INPUT_PRICE  = 5  / 1_000_000;
@@ -99,6 +123,14 @@ class MoktaProvider {
     this._activeAgent      = 'default';
     this._pendingDiffs      = new Map();
     this._writeAccessDecisions = new Map();
+    // Per-category auto-approval (Cline-style). true = run without asking.
+    // Defaults preserve Motkra's current behaviour so enabling this feature changes
+    // nothing until the user flips a toggle. Persisted across sessions in globalState.
+    this._autoApprove = Object.assign(
+      { read: true, web: true, edit: false, commands: true },
+      this._ctx?.globalState?.get('motkra.autoApprove') ?? {}
+    );
+    this._actionApprovals   = new Map();   // category → boolean, cached for the VS Code session
     this._sessionRoots         = new Map();   // sessionId → Motkra's worktree once a task moved there
     this._guardOverrides       = new Set();   // folders where the user chose "Write here anyway"
     this._currentLocalModel = null;
@@ -117,14 +149,21 @@ class MoktaProvider {
     return vscode.workspace.workspaceFolders?.[0]?.uri?.fsPath ?? 'default';
   }
 
-  get _systemPrompt() {
+  /**
+   * Build the system prompt. `withAutonomy` prepends the platform autonomy policy —
+   * used by the tool-using agents (cloud, Kimi, orchestrator) but NOT the local model,
+   * which has no tools and would only be confused by instructions to run tests etc.
+   */
+  _systemPrompt(withAutonomy = false) {
     const agent  = this._agents.find(a => a.id === this._activeAgent);
     const base   = agent?.systemPrompt || DEFAULT_SYSTEM_PROMPT;
     // Project rules (AGENTS.md, CLAUDE.md, copilot-instructions + files they reference) apply to
     // every agent; the selected agent's own file is not repeated.
     const rules  = loadProjectRules(this._workspace, agent?.id && agent.id !== 'default' ? [agent.id] : []).text;
     const memCtx = memory.buildMemoryContext(this._workspace);
-    return [base, rules, memCtx].filter(Boolean).join('\n\n---\n');
+    // AUTONOMY_GUIDE sits right after the agent's own prompt and before project rules, so the
+    // platform's expected working style is established before any task- or repo-specific rules.
+    return [base, withAutonomy ? AUTONOMY_GUIDE : null, rules, memCtx].filter(Boolean).join('\n\n---\n');
   }
 
   /**
@@ -205,6 +244,33 @@ class MoktaProvider {
     return granted;
   }
 
+  /**
+   * Cline-style per-category approval gate for non-file tools (read/web/commands).
+   * Returns true immediately when the category is auto-approved; otherwise asks once
+   * and, on "Allow for this session", remembers the choice for the rest of the session.
+   * @param {string} category  'read' | 'web' | 'commands'
+   * @param {string} describe  one-line summary shown in the prompt (e.g. the command)
+   */
+  async _requestActionApproval(category, describe) {
+    if (this._autoApprove[category]) return true;
+    if (this._actionApprovals.has(category)) return this._actionApprovals.get(category);
+    const answer = await vscode.window.showWarningMessage(
+      `Motkra wants to ${describe}. Allow it?`,
+      { modal: true },
+      'Allow once',
+      'Allow for this session'
+    );
+    if (answer === 'Allow for this session') this._actionApprovals.set(category, true);
+    const granted = answer === 'Allow once' || answer === 'Allow for this session';
+    this._out().appendLine(`[AutoApprove] ${category}: ${granted ? 'granted' : 'denied'} (${describe})`);
+    return granted;
+  }
+
+  /** Push the current auto-approve map to the panel so its toggles reflect reality. */
+  _pushAutoApprove() {
+    this._post({ type: 'auto-approve-state', autoApprove: this._autoApprove });
+  }
+
   // ── Session helpers ──────────────────────────────────────────────────
 
   _newSession() {
@@ -283,6 +349,7 @@ class MoktaProvider {
           this._pushMemoryCount();
           this.reloadOllamaModels();
           this._pushVoiceConfig();
+          this._pushAutoApprove();
           break;
 
         case 'chat':
@@ -319,6 +386,18 @@ class MoktaProvider {
         case 'local-model':
           this._currentLocalModel = msg.model || null;
           break;
+
+        case 'auto-approve-toggle': {
+          // Cline-style per-category approval toggle from the panel.
+          const { category, value } = msg;
+          if (category in this._autoApprove) {
+            this._autoApprove[category] = !!value;
+            this._ctx.globalState.update('motkra.autoApprove', this._autoApprove);
+            this._actionApprovals.delete(category);   // re-evaluate on next tool of this kind
+            this._post({ type: 'auto-approve-state', autoApprove: this._autoApprove });
+          }
+          break;
+        }
 
         // ── Voice commands (Phase 4) ───────────────────────────────────
         case 'voice-start':
@@ -468,6 +547,7 @@ class MoktaProvider {
       root: this._sessionRoots.get(sid),
     };
     toolOpts.onWriteAccessRequest = target => this._guardWrite(sid, target, userText, toolOpts);
+    toolOpts.onActionApproval = (category, describe) => this._requestActionApproval(category, describe);
 
     // ── RAG context (Phase 6) — inject relevant files for cloud agents ────
     if ((model === 'cloud' || model === 'kimi') && cfg.get('workspaceIndex', true) && indexer.isReady()) {
@@ -487,36 +567,42 @@ class MoktaProvider {
 
     try {
       const onDiffRequest = async (id, filePath, before, after) => {
+        // Cline-style "Edit files" toggle: when on, apply edits without the overlay.
+        if (this._autoApprove.edit) return true;
         this._post(s({ type: 'diff-request', id, path: filePath, before, after }));
         return new Promise(res => this._pendingDiffs.set(id, res));
       };
       if (model === 'cloud') {
         await runAgent(
           sess.history,
-          this._systemPrompt,
+          this._systemPrompt(true),
           token       => this._post(s({ type: 'token', text: token })),
           (name, inp) => this._post(s({ type: 'tool',  name, input: JSON.stringify(inp) })),
           full        => sess.history.push({ role: 'assistant', content: full }),
           onDiffRequest,
           null,   // cloud calls don't contribute to savings
-          toolOpts
+          toolOpts,
+          text => this._post(s({ type: 'thinking', text })),
+          info => this._post(s({ type: 'compact', text: `Context trimmed (~${Math.round((info.droppedChars ?? 0) / 1000)}k chars of old tool output omitted) to stay in the model's window.` }))
         );
       } else if (model === 'kimi') {
         await runKimiAgent(
           sess.history,
-          this._systemPrompt,
+          this._systemPrompt(true),
           token => this._post(s({ type: 'token', text: token })),
           (name, inp) => this._post(s({ type: 'tool', name, input: JSON.stringify(inp) })),
           full => sess.history.push({ role: 'assistant', content: full }),
           onDiffRequest,
-          toolOpts
+          toolOpts,
+          text => this._post(s({ type: 'thinking', text })),
+          info => this._post(s({ type: 'compact', text: `Context trimmed (~${Math.round((info.droppedChars ?? 0) / 1000)}k chars of old tool output omitted) to stay in the model's window.` }))
         );
       } else {
         let full       = '';
         const inputChars = sess.history.reduce((a, m) => a + String(m.content).length, 0);
 
         const outTokens = await askGemma(
-          [{ role: 'system', content: this._systemPrompt }, ...sess.history],
+          [{ role: 'system', content: this._systemPrompt() }, ...sess.history],
           token => {
             this._post(s({ type: 'token', text: token }));
             full += token;
@@ -578,18 +664,28 @@ class MoktaProvider {
       root: this._sessionRoots.get(sid),
     };
     toolOpts.onWriteAccessRequest = target => this._guardWrite(sid, target, goal, toolOpts);
+    toolOpts.onActionApproval = (category, describe) => this._requestActionApproval(category, describe);
 
     this._planCancelled   = false;
     this._pausedTasks.clear();
     this._resumeResolvers.clear();
 
     const s = extra => ({ sessionId: sid, ...extra });
+    // Subtask writes go through the same diff-approval overlay as chat, so /plan
+    // never applies an edit the user hasn't seen. Without this, subtask writes were
+    // applied directly with no preview (the old `null` gate). The "Edit files" toggle
+    // short-circuits the overlay, same as in chat.
+    const onDiffRequest = async (id, filePath, before, after) => {
+      if (this._autoApprove.edit) return true;
+      this._post(s({ type: 'diff-request', id, path: filePath, before, after }));
+      return new Promise(res => this._pendingDiffs.set(id, res));
+    };
     this._post(s({ type: 'plan-started', goal }));
 
     try {
       await orchestrator.runOrchestration(
         goal,
-        this._systemPrompt,
+        this._systemPrompt(true),
         tasks  => this._post(s({ type: 'plan-tasks',       tasks: tasks.map(t => ({ id: t.id, title: t.title })) })),
         taskId => this._post(s({ type: 'plan-task-update', taskId, status: 'running' })),
         (taskId, text)   => this._post(s({ type: 'plan-token', taskId, text })),
@@ -601,6 +697,7 @@ class MoktaProvider {
           model:           cfg.get('claudeModel')   ?? 'claude-opus-4-7',
           maxSubAgents:    cfg.get('maxSubAgents')  ?? 4,
           toolOpts,
+          onDiffRequest,
           isCancelled:     ()       => this._planCancelled,
           isPaused:        (taskId) => this._pausedTasks.has(taskId),
           onPauseResolved: (taskId, resolve) => this._resumeResolvers.set(taskId, resolve),
