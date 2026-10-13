@@ -6,6 +6,7 @@ const { runAllowed, tokenize } = require('./core/command');
 const { isMutatingGit } = require('./core/branch-guard');
 const { formatNoMatchHint } = require('./core/fuzzy-match');
 const { guardContext } = require('./core/context-guard');
+const gh = require('./core/github');
 
 let vscode;
 try { vscode = require('vscode'); } catch { vscode = null; }
@@ -125,7 +126,29 @@ const TOOLS = [
       type: 'object',
       properties: {}
     }
-  }
+  },
+  {
+    name: 'github',
+    description:
+      'Work with a GitHub repo: list or read issues and PRs, create issues, comment, and get a PR\'s diff or changed files. ' +
+      'Use action="list_issues" (set pull=true for PRs), "get_issue" (needs number), "create_issue" (needs title), ' +
+      '"comment" (needs number + body), "pr_diff" (needs number), or "pr_files" (needs number). ' +
+      'repo is "owner/name". Reading public repos works without a token; set motkra.githubToken for private repos, writes, and a higher rate limit.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        action: { type: 'string', enum: ['list_issues', 'get_issue', 'create_issue', 'comment', 'pr_diff', 'pr_files'], description: 'What to do' },
+        repo:   { type: 'string', description: 'owner/repo, e.g. williamag929/Quantum_Motrka' },
+        number: { type: 'integer', description: 'Issue or PR number (for get_issue, comment, pr_diff, pr_files)' },
+        title:  { type: 'string', description: 'Issue title (for create_issue)' },
+        body:   { type: 'string', description: 'Issue/comment body, markdown (for create_issue, comment)' },
+        labels: { type: 'array', items: { type: 'string' }, description: 'Labels (for create_issue)' },
+        state:  { type: 'string', enum: ['open', 'closed', 'all'], description: 'For list_issues (default open)' },
+        pull:   { type: 'boolean', description: 'For list_issues: true lists pull requests instead of issues' },
+      },
+      required: ['action', 'repo'],
+    },
+  },
 ];
 
 // ── Workspace helpers ─────────────────────────────────────────────────────────
@@ -331,6 +354,37 @@ async function executeTool(name, input, opts = {}) {
       const mime = newest.endsWith('.png') ? 'image/png' : 'image/jpeg';
       // Return image content block — handled by the agentic loop
       return [{ type: 'image', source: { type: 'base64', media_type: mime, data } }];
+    }
+
+    case 'github': {
+      const cfg      = vscode?.workspace?.getConfiguration('motkra');
+      const token    = cfg?.get('githubToken') ?? '';
+      const { action, repo } = input;
+      if (!repo) return 'github: "repo" is required (owner/name).';
+      try {
+        switch (action) {
+          case 'list_issues':
+            return await gh.listIssues(repo, { state: input.state, labels: input.labels, pull: input.pull }, token);
+          case 'get_issue':
+            if (input.number == null) return 'github get_issue: "number" is required.';
+            return await gh.getIssue(repo, Number(input.number), token);
+          case 'create_issue':
+            return await gh.createIssue(repo, { title: input.title, body: input.body, labels: input.labels }, token);
+          case 'comment':
+            if (input.number == null || !input.body) return 'github comment: "number" and "body" are required.';
+            return await gh.comment(repo, Number(input.number), input.body, token);
+          case 'pr_diff':
+            if (input.number == null) return 'github pr_diff: "number" is required.';
+            return await gh.getPRDiff(repo, Number(input.number), token);
+          case 'pr_files':
+            if (input.number == null) return 'github pr_files: "number" is required.';
+            return await gh.listPRFiles(repo, Number(input.number), token);
+          default:
+            return `github: unknown action "${action}". Use list_issues, get_issue, create_issue, comment, pr_diff, or pr_files.`;
+        }
+      } catch (err) {
+        return `github ${action} failed: ${err.message}`;
+      }
     }
 
     default:
