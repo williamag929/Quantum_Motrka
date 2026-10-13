@@ -448,6 +448,22 @@ Principles:
 - [ ] **21D-4** Cost counter (1D) treats ClinePass/free models correctly: free models count as $0, ClinePass usage shows subscription-vs-API savings
 - [ ] **21D-5** Telemetry double-check: enabling the Cline lane must not re-enable SDK/product telemetry (21A-2); document the exact behavior in the privacy section of the README
 
+### 21E — One Runtime, Thin Clients (Daemon-Centralized)
+*The daemon owns the only agent runtime (SDK sidecar + privacy brain). The tray chat AND `dual_ai_ext` are both thin clients of it — no duplicated agent loops, routers or privacy scanners in the extension.*
+
+```
+ tray chat (Electron) ┐
+ VS Code ext          ├─→ daemon Agent API (127.0.0.1:7432) ─→ brain gate (7433) ─→ SDK agents (local/cloud)
+ browser ext (future) ┘        single sessions, grants, memory, cost counter
+```
+
+- [ ] **21E-1** Daemon Agent API: streaming endpoint (SSE) on the existing 7432 server — `run(messages, mode, tools-profile)` → routed by the brain, executed by the SDK sidecar, events streamed back; same localhost hardening as the brain (`allowed_request`: Host check, no Origin, JSON only)
+- [ ] **21E-2** `dual_ai_ext` becomes a client: `runAgent`/`runKimiAgent` internals replaced by a daemon client that streams events to the panel; the extension keeps its UX (diff preview, activity blocks, inline completions) but owns zero model traffic
+- [ ] **21E-3** Retire the duplicates: extension's `router.js` and `core/privacy-scanner.js` defer to the brain (single privacy gate); `core/provider-settings.js` reads the daemon's provider state (Phase 23 store) instead of its own keys
+- [ ] **21E-4** Shared state by construction: one session history, one grant/permission store (`grant-store.js` risk tiers apply identically in tray and editor), one memory (Phase 3) and one cost counter (1D) for both surfaces
+- [ ] **21E-5** Daemon-down behavior: extension detects `/status` failure and offers "Start daemon" (spawns it, like `brain.js` spawns the brain) — never silently falls back to a parallel unredacted path; hard offline mode = local model only
+- [ ] **21E-6** The tray chat migrates onto the same API (dogfooding): `main.js`'s hand-rolled streaming is deleted, both clients proven against one contract test suite
+
 ---
 
 ## Phase 22 — Idea Seeds (Semillas) · Layer 11 (Future · Vision)
