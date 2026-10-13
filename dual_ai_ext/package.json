@@ -172,6 +172,11 @@
           "default": "",
           "description": "Anthropic API key. Only needed if ANTHROPIC_API_KEY is not set in your environment and no .env file is found."
         },
+        "motkra.githubToken": {
+          "type": "string",
+          "default": "",
+          "description": "GitHub personal access token for the github agent tool and PR review. Create a fine-grained token with Contents:read + Issues:read/write on your repo. Leave blank to use public repos only (low rate limit)."
+        },
         "motkra.mcpServer": {
           "type": "boolean",
           "default": false,

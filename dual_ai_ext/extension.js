@@ -34,6 +34,7 @@ const orchestrator          = require('./core/orchestrator');
 const { loadProjectRules, mentionsWorktrees } = require('./core/project-rules');
 const branchGuard           = require('./core/branch-guard');
 const providerSettings      = require('./core/provider-settings');
+const github                = require('./core/github');
 
 const DEFAULT_SYSTEM_PROMPT =
   'You are a coding agent inside VS Code. ' +
@@ -976,8 +977,24 @@ function activate(context) {
       }
     }),
 
-    vscode.commands.registerCommand('motkra.reviewPR', () => {
-      provider.inject('Review this PR diff for bugs, style issues, and improvements:\n```diff\n\n```');
+    vscode.commands.registerCommand('motkra.reviewPR', async () => {
+      const cfg   = vscode.workspace.getConfiguration('motkra');
+      const token = cfg.get('githubToken') ?? '';
+      const answer = await vscode.window.showInputBox({
+        prompt: 'PR to review (owner/repo#number, e.g. williamag929/Quantum_Motrka#3)',
+        placeHolder: 'owner/repo#number',
+        validateInput: v => (/#\d+/.test(v) ? null : 'Use owner/repo#number'),
+      });
+      if (!answer) return;
+      const m = answer.match(/^([\w.-]+\/[\w.-]+?)#(\d+)$/);
+      if (!m) { vscode.window.showWarningMessage('Could not parse "owner/repo#number".'); return; }
+      const [, repo, num] = m;
+      try {
+        const diff = await github.listPRFiles(repo, Number(num), token);
+        provider.inject(`Review this pull request for bugs, style issues, and improvements. Focus on correctness and risk; cite file:line.\n\n${diff}`);
+      } catch (err) {
+        vscode.window.showWarningMessage(`Could not fetch PR #${num}: ${err.message}`);
+      }
     }),
 
     // ── Phase 11 — Daemon status command ──────────────────────────────

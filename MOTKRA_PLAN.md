@@ -243,9 +243,9 @@ Target: 1,000 GitHub stars. Timeline: ~8 weeks.
 ## Phase 13 — External Integrations · Layer 6 (Week 7–8)
 
 ### 13A — GitHub
-- [ ] **13A-1** Add `motkra.githubToken` setting
-- [ ] **13A-2** Add `github` tool to agent: `list_issues`, `get_pr`, `post_comment`, `get_review_comments`
-- [ ] **13A-3** On `motkra.reviewPR`: fetch PR diff via GitHub API, send to Claude, post review as GitHub review (with approval)
+- [x] **13A-1** Add `motkra.githubToken` setting
+- [x] **13A-2** Add `github` tool to agent: `list_issues`, `get_pr`, `post_comment`, `get_review_comments` — implemented as one `github` tool with actions (list_issues/get_issue/create_issue/comment/pr_diff/pr_files) via a self-contained `core/github.js` (plain https, no deps) so the extension packages standalone
+- [x] **13A-3** On `motkra.reviewPR`: prompts for `owner/repo#number`, fetches the PR's changed files + diffs via the GitHub API, and injects a review prompt — no longer a stub with an empty diff block
 
 ### 13B — Daily Briefing
 - [ ] **13B-1** Register VS Code task that runs at first window open after 8am (check `globalState.lastBriefing` date)
