@@ -177,6 +177,11 @@
           "default": "",
           "description": "GitHub personal access token for the github agent tool and PR review. Create a fine-grained token with Contents:read + Issues:read/write on your repo. Leave blank to use public repos only (low rate limit)."
         },
+        "motkra.dailyBriefing": {
+          "type": "boolean",
+          "default": false,
+          "description": "Show a morning briefing once a day after 8am: yesterday's commits plus open GitHub issues (if a token is set), summarized by Claude into a few bullets."
+        },
         "motkra.mcpServer": {
           "type": "boolean",
           "default": false,

@@ -35,6 +35,7 @@ const { loadProjectRules, mentionsWorktrees } = require('./core/project-rules');
 const branchGuard           = require('./core/branch-guard');
 const providerSettings      = require('./core/provider-settings');
 const github                = require('./core/github');
+const { maybeRunBriefing } = require('./core/briefing');
 
 const DEFAULT_SYSTEM_PROMPT =
   'You are a coding agent inside VS Code. ' +
@@ -879,6 +880,9 @@ function activate(context) {
 
   // Build initial index 1.5 s after activation to not block startup
   setTimeout(buildIndex, 1500);
+
+  // ── Daily briefing (Phase 13B) — 4 s after start, so it never blocks activation ──
+  setTimeout(() => { maybeRunBriefing(provider, context).catch(() => {}); }, 4000);
 
   // Incremental updates on save / create / delete
   context.subscriptions.push(
