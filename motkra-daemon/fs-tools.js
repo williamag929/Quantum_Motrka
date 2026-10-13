@@ -221,4 +221,4 @@ async function runTool(name, input, { ask, onActivity } = {}) {
   throw new Error(`Unknown tool: ${name}`);
 }
 
-module.exports = { TOOLS, SCOPES, runTool, listGrants, revokeAll, isBlocked, isInside };
+module.exports = { TOOLS, SCOPES, runTool, listGrants, revokeAll, isBlocked, isInside, isGranted };

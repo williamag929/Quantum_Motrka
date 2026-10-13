@@ -79,7 +79,7 @@
     gap: 4px;
     -webkit-app-region: no-drag;
   }
-  #vscode-btn, #close-btn, #tts-btn, #clear-btn {
+  #settings-btn, #vscode-btn, #close-btn, #tts-btn, #clear-btn {
     background: none;
     border: none;
     color: var(--fg);
@@ -390,7 +390,36 @@
     user-select: text;
   }
   #perm-modal p { font-size: 11px; color: var(--fg-dim); line-height: 1.5; }
-  #perm-actions { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-top: 4px; }
+  #perm-actions { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 6px; margin-top: 4px; }
+  #perm-actions button[hidden] { display: none; }
+
+  /* ── Settings panel (model providers) ── */
+  #settings-btn:hover { opacity: 1; background: var(--bg3); color: var(--fg); }
+  #settings-overlay {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,.6); z-index: 105;
+    align-items: center; justify-content: center; -webkit-app-region: no-drag;
+  }
+  #settings-overlay.visible { display: flex; }
+  #settings-modal {
+    background: var(--bg2); border: 1px solid var(--border); border-radius: 10px;
+    padding: 16px 18px 14px; width: 400px; max-width: calc(100vw - 24px);
+    display: flex; flex-direction: column; gap: 10px; box-shadow: 0 8px 32px rgba(0,0,0,.5);
+  }
+  #settings-modal h3 { margin: 0; font-size: 14px; }
+  #settings-modal .hint { margin: 0; font-size: 11px; color: var(--fg-dim); line-height: 1.4; }
+  .provider {
+    display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; align-items: center;
+    padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg);
+  }
+  .provider input { grid-row: span 2; width: 16px; height: 16px; accent-color: var(--teal); }
+  .provider .name { font-size: 13px; }
+  .provider .meta { font-size: 11px; color: var(--fg-dim); font-family: 'Cascadia Code', 'Consolas', monospace; }
+  .provider.unconfigured { opacity: .55; }
+  #cloud-pref { display: flex; gap: 14px; font-size: 12px; align-items: center; }
+  #cloud-pref label { display: flex; gap: 5px; align-items: center; }
+  #settings-close { align-self: flex-end; padding: 6px 14px; border-radius: 5px; border: 1px solid var(--teal);
+                    background: var(--teal); color: #111; cursor: pointer; font-size: 12px; }
+  #perm-folder { white-space: pre-wrap; word-break: break-all; }
   #perm-actions button {
     padding: 7px 0;
     border-radius: 5px;
@@ -415,6 +444,7 @@
     <span id="listen-dot" title="Listening…"></span>
   </div>
   <div id="titlebar-right">
+    <button id="settings-btn" title="Settings: models">⚙</button>
     <button id="vscode-btn" title="Open VS Code">⌨</button>
     <button id="tts-btn"    title="Voice responses: OFF">🔊</button>
     <button id="clear-btn"  title="Clear conversation">↺ clear</button>
@@ -445,6 +475,22 @@
       <button id="mic-allow">Allow</button>
       <button id="mic-deny">Not now</button>
     </div>
+  </div>
+</div>
+
+<!-- Settings: which model providers Motkra may use -->
+<div id="settings-overlay">
+  <div id="settings-modal" role="dialog" aria-labelledby="settings-title">
+    <h3 id="settings-title">⚙ Models</h3>
+    <div id="provider-list"></div>
+    <div id="cloud-pref">
+      <span>Preferred cloud:</span>
+      <label><input type="radio" name="cloud-pref" value="claude"> Claude</label>
+      <label><input type="radio" name="cloud-pref" value="nvidia"> NVIDIA</label>
+    </div>
+    <p class="hint">Pausing Ollama frees its memory. Private conversations only run on Ollama: while it is paused
+      Motkra tells you instead of sending them to the cloud. Files, console and browser tools only work with Claude.</p>
+    <button id="settings-close">Done</button>
   </div>
 </div>
 
@@ -485,7 +531,7 @@ const noKeyBanner= document.getElementById('no-key-banner');
 let history      = [];
 let curBubble    = null;
 let busy         = false;
-let _modelForce  = 'auto'; // 'auto' | 'claude' | 'gemma'
+let _modelForce  = 'auto'; // 'auto' | 'claude' | 'gemma' | 'kimi'
 
 const modelBadge = document.getElementById('model-badge');
 
@@ -495,17 +541,59 @@ window.motkra.getConfig().then(cfg => {
 });
 
 // ── Model badge ───────────────────────────────────────────────────────────
+const BADGES = {
+  gemma:  { text: '🏠 Gemma',  bg: '#1a3a1a', fg: '#89d185' },
+  claude: { text: '☁ Claude', bg: '',        fg: '' },
+  kimi:   { text: '⚡ Kimi',   bg: '#2e2440', fg: '#c5a3ff' },
+  none:   { text: '⚙ Off',    bg: '#3a2a1a', fg: '#e0b070' },
+};
+
 function setBadge(model) {
-  if (model === 'gemma') {
-    modelBadge.textContent = '🏠 Gemma';
-    modelBadge.style.background = '#1a3a1a';
-    modelBadge.style.color      = '#89d185';
-  } else {
-    modelBadge.textContent = '☁ Claude';
-    modelBadge.style.background = '';
-    modelBadge.style.color      = '';
-  }
+  const b = BADGES[model] ?? BADGES.claude;
+  modelBadge.textContent      = b.text;
+  modelBadge.style.background = b.bg;
+  modelBadge.style.color      = b.fg;
 }
+
+// ── Settings panel ────────────────────────────────────────────────────────
+const settingsOverlay = document.getElementById('settings-overlay');
+const providerList    = document.getElementById('provider-list');
+const PROVIDER_ICON   = { local: '🏠', claude: '☁', nvidia: '⚡' };
+
+function renderSettings(status) {
+  providerList.replaceChildren(...status.providers.map(p => {
+    const row = document.createElement('label');
+    row.className = 'provider' + (p.configured ? '' : ' unconfigured');
+    const box = document.createElement('input');
+    box.type = 'checkbox';
+    box.checked = p.enabled && p.configured;
+    box.disabled = !p.configured;
+    box.addEventListener('change', async () => {
+      renderSettings(await window.motkra.saveSettings({ providers: { [p.id]: box.checked } }));
+    });
+    const name = document.createElement('span');
+    name.className = 'name';
+    name.textContent = `${PROVIDER_ICON[p.id] ?? ''} ${p.label}`;
+    const meta = document.createElement('span');
+    meta.className = 'meta';
+    meta.textContent = p.configured ? `${p.model} · ${p.enabled ? 'on' : 'paused'}` : `add ${p.needs} to dual_ai/.env`;
+    row.append(box, name, meta);
+    return row;
+  }));
+  document.querySelectorAll('input[name="cloud-pref"]').forEach(r => { r.checked = r.value === status.cloudPreference; });
+}
+
+async function openSettings() {
+  renderSettings(await window.motkra.getSettings());
+  settingsOverlay.classList.add('visible');
+}
+
+document.getElementById('settings-btn').addEventListener('click', openSettings);
+document.getElementById('settings-close').addEventListener('click', () => settingsOverlay.classList.remove('visible'));
+settingsOverlay.addEventListener('click', e => { if (e.target === settingsOverlay) settingsOverlay.classList.remove('visible'); });
+document.querySelectorAll('input[name="cloud-pref"]').forEach(r => r.addEventListener('change', async () => {
+  renderSettings(await window.motkra.saveSettings({ cloudPreference: r.value }));
+}));
 
 window.motkra.onModelSelected(model => setBadge(model));
 
@@ -516,6 +604,9 @@ window.motkra.onRouteInfo(info => {
   _route = info;
   if (info.private) modelBadge.textContent += ' 🔒';
   modelBadge.title = info.reason || '';
+  // The bubble is created before routing; label it with the model that actually answers.
+  const lbl = curBubble?.parentNode?.querySelector('.label');
+  if (lbl) { lbl.textContent = modelBadge.textContent; lbl.title = info.reason || ''; }
 });
 
 // ── Register token stream handler once ───────────────────────────────────
@@ -550,16 +641,33 @@ const permFolder  = document.getElementById('perm-folder');
 const permNote    = document.getElementById('perm-note');
 const permQueue   = [];
 
+// One modal for every kind of consent: folders (read/write), console commands (run) and
+// websites (browse/act). The main process decides which scopes a request may offer.
+const PERM_TEXT = {
+  read:   req => ['🔒 Allow Motkra to read this folder?', req.folder,
+                  'Files you allow are sent to Claude (cloud) to answer you. .env files, SSH keys and other credentials are never shared.'],
+  write:  req => ['✏️ Allow Motkra to change files in this folder?', req.folder, `It wants to create or overwrite: ${req.target}`],
+  run:    req => [req.tier === 'destructive' ? '⚠️ Run this command? It can delete or change things'
+                                             : '⌨️ Allow Motkra to run this command?',
+                  req.command,
+                  `In ${req.cwd}` + (req.shell === 'powershell' ? ' · through PowerShell' : '') +
+                  (req.tier === 'destructive' ? ' · asked every time' : '') +
+                  '. Its output is sent to Claude (secrets redacted).'],
+  browse: req => ['🌐 Allow Motkra to open this site?', req.origin,
+                  `In the Motkra Browser window. The page text is sent to Claude (secrets redacted). Page: ${req.url}`],
+  act:    req => ['🖱️ Allow Motkra to click and type on this site?', req.origin,
+                  'It may fill in forms and press buttons here. It never types passwords or payment details.'],
+};
+
 function showNextPermission() {
   const req = permQueue[0];
   if (!req) { permOverlay.classList.remove('visible'); return; }
-  const write = req.op === 'write';
-  permTitle.textContent  = write ? '✏️ Allow Motkra to change files in this folder?'
-                                 : '🔒 Allow Motkra to read this folder?';
-  permFolder.textContent = req.folder;
-  permNote.textContent   = write
-    ? `It wants to create or overwrite: ${req.target}`
-    : 'Files you allow are sent to Claude (cloud) to answer you. .env files, SSH keys and other credentials are never shared.';
+  const [title, subject, note] = (PERM_TEXT[req.op] ?? PERM_TEXT.read)(req);
+  permTitle.textContent  = title;
+  permFolder.textContent = subject;
+  permNote.textContent   = note;
+  const scopes = req.scopes ?? ['once', 'session', 'always', 'deny'];
+  permOverlay.querySelectorAll('#perm-actions button').forEach(b => { b.hidden = !scopes.includes(b.dataset.scope); });
   permOverlay.classList.add('visible');
   permOverlay.querySelector('button[data-scope="once"]').focus();
 }
@@ -840,19 +948,34 @@ async function send() {
     b.textContent = '☁ Switched to Claude — all messages go to the cloud until you type /auto or /local.';
     return;
   }
-  if (text === '/folders') {
+  if (text === '/kimi') {
+    _modelForce = 'kimi';
+    setBadge('kimi');
+    inputEl.value = '';
+    const b = addBubble('assistant', 'Motkra');
+    b.textContent = '⚡ Switched to Kimi (NVIDIA) — all messages go to NVIDIA until you type /auto, /local or /cloud.';
+    return;
+  }
+  if (text === '/settings') {
+    inputEl.value = '';
+    openSettings();
+    return;
+  }
+  if (text === '/folders' || text === '/permissions') {
     inputEl.value = '';
     const grants = await window.motkra.listGrants();
+    const line = g => g.kind === 'command' ? `• ⌨️ ${g.scope} · ${g.command} · in ${g.folder}`
+                    : g.kind === 'site'    ? `• 🌐 ${g.op} · ${g.scope} · ${g.origin}`
+                    :                        `• 📂 ${g.op} · ${g.scope} · ${g.folder}`;
     addSystemNote(grants.length
-      ? 'Folders Motkra may use:\n' + grants.map(g => `• ${g.op} · ${g.scope} · ${g.folder}`).join('\n') +
-        '\n\nType /forget to remove them all.'
-      : 'No folder permissions yet. Motkra asks the first time it needs a folder.');
+      ? 'What Motkra may use:\n' + grants.map(line).join('\n') + '\n\nType /forget to remove them all.'
+      : 'No permissions yet. Motkra asks the first time it needs a folder, a command or a site.');
     return;
   }
   if (text === '/forget') {
     inputEl.value = '';
     await window.motkra.revokeAllGrants();
-    addSystemNote('🔒 All folder permissions removed. Motkra will ask again before using any folder.');
+    addSystemNote('🔒 All permissions removed (folders, commands, sites). Motkra will ask again before using any of them.');
     return;
   }
   if (text === '/auto') {

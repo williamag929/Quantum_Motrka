@@ -51,6 +51,46 @@
     flex-shrink: 0;
   }
   #clear-btn:hover { opacity: 1; }
+  #autoapprove-btn {
+    background: none;
+    border: none;
+    color: var(--vscode-foreground);
+    opacity: 0.5;
+    cursor: pointer;
+    font-size: 11px;
+    padding: 2px 4px;
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+  #autoapprove-btn:hover, #autoapprove-btn.on { opacity: 1; }
+  #autoapprove-btn.on { color: var(--vscode-button-background, #0e639c); }
+
+  /* Auto-approve popover */
+  .hidden { display: none !important; }
+  #autoapprove-pop {
+    position: absolute;
+    top: 34px;
+    right: 6px;
+    z-index: 60;
+    min-width: 230px;
+    background: var(--vscode-menu-background, var(--vscode-editorWidget-background, #252526));
+    color: var(--vscode-menu-foreground, var(--vscode-foreground));
+    border: 1px solid var(--vscode-menu-border, #454545);
+    border-radius: 6px;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.4);
+    padding: 8px 10px;
+    font-size: 12px;
+  }
+  .aa-title { font-weight: 600; margin-bottom: 8px; }
+  .aa-sub { font-weight: 400; opacity: 0.6; }
+  .aa-row {
+    display: flex; align-items: center; gap: 8px;
+    padding: 4px 2px; cursor: pointer; border-radius: 3px;
+  }
+  .aa-row:hover { background: var(--vscode-list-hoverBackground, rgba(255,255,255,0.06)); }
+  .aa-row input { cursor: pointer; margin: 0; }
+  .aa-ico { width: 16px; text-align: center; }
+  .aa-note { margin-top: 8px; font-size: 10px; opacity: 0.55; line-height: 1.4; }
 
   /* ── Agent picker ── */
   #agent-wrap { display: flex; align-items: center; flex: 1; min-width: 0; }
@@ -210,6 +250,61 @@
   .tool-call::before { content: '⚙'; }
 
   .cursor { display: inline-block; width: 2px; height: 1em; background: currentColor; animation: blink .7s step-end infinite; vertical-align: text-bottom; }
+
+  /* ── Collapsible thinking / activity blocks (semi-hidden, expand on click) ── */
+  .thinking-block, .activity-block {
+    border: 1px solid var(--vscode-widget-border, #333);
+    border-radius: 5px;
+    margin: 2px 0 6px;
+    background: var(--vscode-textBlockQuote-background, transparent);
+    overflow: hidden;
+  }
+  .thinking-block > summary, .activity-block > summary {
+    cursor: pointer;
+    user-select: none;
+    font-size: 11px;
+    opacity: 0.7;
+    padding: 4px 9px;
+    list-style: none;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .thinking-block > summary::-webkit-details-marker,
+  .activity-block > summary::-webkit-details-marker { display: none; }
+  .thinking-block > summary::before,
+  .activity-block > summary::before {
+    content: '▸';
+    font-size: 10px;
+    transition: transform .15s ease;
+  }
+  .thinking-block[open] > summary::before,
+  .activity-block[open] > summary::before { transform: rotate(90deg); }
+  .thinking-block > summary:hover,
+  .activity-block > summary:hover { opacity: 1; }
+  .thinking-body {
+    padding: 2px 10px 8px;
+    font-size: 11px;
+    line-height: 1.5;
+    opacity: 0.8;
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 240px;
+    overflow-y: auto;
+    border-top: 1px solid var(--vscode-widget-border, #333);
+  }
+  .activity-note {
+    padding: 5px 10px 0;
+    font-size: 11px;
+    line-height: 1.5;
+    opacity: 0.8;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .activity-note.compact-note { color: var(--vscode-editorWarning-foreground, #d7a03c); opacity: 1; }
+  .activity-block .tool-call { padding: 3px 10px; }
+  /* The answer bubble always leads: slightly stronger border so it reads as the result. */
+  .msg.assistant .bubble.answer { border-color: var(--vscode-focusBorder, #007acc); }
   @keyframes blink { 50% { opacity: 0; } }
 
   /* ── Input area ── */
@@ -722,6 +817,17 @@
     <span id="activity-text">Thinking…</span>
   </div>
   <button id="clear-btn" title="Clear current session">✕ clear</button>
+  <button id="autoapprove-btn" title="Auto-approve: choose which actions run without asking">🛡 Auto-approve</button>
+</div>
+
+<!-- Auto-approve popover (Cline-style per-category toggles) -->
+<div id="autoapprove-pop" class="hidden">
+  <div class="aa-title">Auto-approve <span class="aa-sub">— run these without asking</span></div>
+  <label class="aa-row"><input type="checkbox" data-cat="read"><span class="aa-ico">🔍</span> Read files</label>
+  <label class="aa-row"><input type="checkbox" data-cat="edit"><span class="aa-ico">✏️</span> Edit files</label>
+  <label class="aa-row"><input type="checkbox" data-cat="commands"><span class="aa-ico">⌨️</span> Execute commands</label>
+  <label class="aa-row"><input type="checkbox" data-cat="web"><span class="aa-ico">🌐</span> Fetch web content</label>
+  <div class="aa-note">Applies to Claude &amp; Kimi. Edits you leave off still open the diff preview.</div>
 </div>
 
 <div id="sessions-bar">
@@ -770,11 +876,12 @@
     <span id="ctx-lines"></span>
     <button id="ctx-detach" title="Detach context">×</button>
   </div>
-  <textarea id="input" placeholder="Ask anything… Claude edits files, Gemma answers fast." rows="3"></textarea>
+  <textarea id="input" placeholder="Ask anything… Claude edits files, Kimi answers, Gemma runs locally." rows="3"></textarea>
   <div id="toolbar">
     <div id="model-switcher">
       <button id="sw-auto"  class="active" title="Auto-route based on message">⚡ Auto</button>
       <button id="sw-cloud" title="Always use Claude">☁ Claude</button>
+      <button id="sw-kimi"  title="Always use Kimi through NVIDIA; can edit files after approval">⚡ Kimi</button>
       <button id="sw-local" title="Always use local Gemma">⬡ Local</button>
     </div>
     <div style="display:flex;gap:4px;align-items:center">
@@ -1124,20 +1231,67 @@ function addBubbleToPane(pane, role, labelText) {
   return bubble;
 }
 
-function addToolCallToPane(pane, name, input) {
-  if (!pane) return;
-  const el = document.createElement('div');
-  el.className   = 'tool-call';
-  el.textContent = ` ${name}  ${input}`;
-  pane.appendChild(el);
-  if (pane === sessions.get(activeSessId)?.pane) pane.scrollTop = pane.scrollHeight;
+// ── Collapsible "Activity" block: process narration + tool calls (20A-5) ──────
+function ensureActivity(sess) {
+  if (sess.activityWrap) return;
+  const det  = document.createElement('details');
+  det.className = 'activity-block';
+  const sum  = document.createElement('summary');
+  sum.textContent = 'Working… (click to expand)';
+  det.appendChild(sum);
+  // Insert above the assistant answer bubble (its .msg.assistant wrapper), like the thinking block.
+  const anchor = sess.curBubble?.parentElement ?? null;
+  if (anchor) sess.pane.insertBefore(det, anchor);
+  else sess.pane.appendChild(det);
+  sess.activityWrap = det;
+}
+
+function updateActivityHeader(sess) {
+  if (!sess.activityWrap) return;
+  const n = sess.stepCount ?? 0;
+  sess.activityWrap.querySelector('summary').textContent =
+    `${n} step${n === 1 ? '' : 's'} — click to expand`;
 }
 
 // ── Agent picker ──────────────────────────────────────────────────────────
 agentSelect.addEventListener('change', () => vscode.postMessage({ type: 'agent', id: agentSelect.value }));
 
+// ── Auto-approve popover (Cline-style per-category toggles) ───────────────
+const aaBtn  = document.getElementById('autoapprove-btn');
+const aaPop  = document.getElementById('autoapprove-pop');
+const aaBoxes = [...aaPop.querySelectorAll('input[data-cat]')];
+
+function syncAutoApproveUI(autoApprove) {
+  aaBoxes.forEach(cb => { cb.checked = !!autoApprove[cb.dataset.cat]; });
+  const anyOn = aaBoxes.some(cb => cb.checked);
+  aaBtn.classList.toggle('on', anyOn);
+  aaBtn.title = anyOn
+    ? 'Auto-approve ON for: ' + aaBoxes.filter(cb => cb.checked).map(cb => cb.dataset.cat).join(', ')
+    : 'Auto-approve: choose which actions run without asking';
+}
+
+aaBtn.addEventListener('click', e => {
+  e.stopPropagation();
+  aaPop.classList.toggle('hidden');
+});
+aaBoxes.forEach(cb => cb.addEventListener('change', () => {
+  vscode.postMessage({ type: 'auto-approve-toggle', category: cb.dataset.cat, value: cb.checked });
+  syncAutoApproveUI(Object.fromEntries(aaBoxes.map(b => [b.dataset.cat, b.checked])));
+}));
+// Close the popover when clicking anywhere else in the panel.
+document.addEventListener('click', e => {
+  if (!aaPop.classList.contains('hidden') && !aaPop.contains(e.target) && e.target !== aaBtn) {
+    aaPop.classList.add('hidden');
+  }
+});
+
 // ── Model switcher ────────────────────────────────────────────────────────
-const swBtns = { auto: document.getElementById('sw-auto'), cloud: document.getElementById('sw-cloud'), local: document.getElementById('sw-local') };
+const swBtns = {
+  auto: document.getElementById('sw-auto'),
+  cloud: document.getElementById('sw-cloud'),
+  kimi: document.getElementById('sw-kimi'),
+  local: document.getElementById('sw-local')
+};
 Object.entries(swBtns).forEach(([mode, btn]) => {
   btn.addEventListener('click', () => {
     modelMode = mode;
@@ -1232,17 +1386,29 @@ window.addEventListener('message', ev => {
     case 'model':
       // Update badge only if this is for the active session
       if (!sid || sid === activeSessId) {
-        badge.textContent = msg.model === 'cloud' ? '☁ Claude' : '🏠 Gemma 4';
-        badge.style.background = msg.model === 'cloud'
-          ? 'var(--vscode-statusBarItem-remoteBackground, #007acc)'
-          : 'var(--vscode-statusBarItem-prominentBackground, #388a34)';
+        const badges = {
+          cloud: { text: '☁ Claude', background: 'var(--vscode-statusBarItem-remoteBackground, #007acc)' },
+          kimi:  { text: '⚡ Kimi', background: '#2e2440' },
+          local: { text: '🏠 Gemma 4', background: 'var(--vscode-statusBarItem-prominentBackground, #388a34)' }
+        };
+        const selected = badges[msg.model] ?? badges.local;
+        badge.textContent = selected.text;
+        badge.style.background = selected.background;
+        badge.style.color = msg.model === 'kimi' ? '#c5a3ff' : '';
       }
       break;
 
     case 'start':
       if (!sess) break;
+      sess.thinkBlock   = null;   // collapsible reasoning body
+      sess.thinkWrap    = null;   // its <details>
+      sess.activityWrap = null;   // collapsible activity <details>
+      sess.stepCount    = 0;      // tool calls seen this turn (for the "N steps" counter)
       sess.curBubble = addBubbleToPane(sess.pane, 'assistant', badge.textContent);
-      if (sess.curBubble) sess.curBubble.innerHTML = '<span class="cursor"></span>';
+      if (sess.curBubble) {
+        sess.curBubble.classList.add('answer');
+        sess.curBubble.innerHTML = '<span class="cursor"></span>';
+      }
       break;
 
     case 'token':
@@ -1253,9 +1419,66 @@ window.addEventListener('message', ev => {
       if (sid === activeSessId) sess.pane.scrollTop = sess.pane.scrollHeight;
       break;
 
-    case 'tool':
-      if (sess) addToolCallToPane(sess.pane, msg.name, msg.input);
+    case 'thinking':
+      // Adaptive thinking / reasoning — kept in a collapsed <details> so the answer stays the focus.
+      if (!sess) break;
+      if (!sess.thinkBlock) {
+        const det   = document.createElement('details');
+        det.className = 'thinking-block';
+        const sum   = document.createElement('summary');
+        sum.textContent = 'Thinking… (click to expand)';
+        const body  = document.createElement('div');
+        body.className = 'thinking-body';
+        det.appendChild(sum);
+        det.appendChild(body);
+        // Place it above the answer bubble (the assistant wrapper), or at the end if none yet.
+        const anchor = sess.curBubble?.parentElement ?? null;
+        if (anchor) sess.pane.insertBefore(det, anchor);
+        else sess.pane.appendChild(det);
+        sess.thinkBlock = body;
+        sess.thinkWrap  = det;
+      }
+      sess.thinkBlock._raw = (sess.thinkBlock._raw ?? '') + (msg.text ?? '');
+      sess.thinkBlock.textContent = sess.thinkBlock._raw;
+      sess.thinkBlock.scrollTop = sess.thinkBlock.scrollHeight;
       break;
+
+    case 'tool': {
+      if (!sess) break;
+      sess.stepCount = (sess.stepCount ?? 0) + 1;
+
+      // Any text streamed before this tool call is process narration, not the answer —
+      // move it into the collapsed Activity block so the answer bubble stays clean.
+      if (sess.curBubble && (sess.curBubble._raw ?? '').trim()) {
+        ensureActivity(sess);
+        const note = document.createElement('div');
+        note.className   = 'activity-note';
+        note.textContent = sess.curBubble._raw.trim();
+        sess.activityWrap.appendChild(note);
+        sess.curBubble._raw = '';
+        sess.curBubble.innerHTML = '<span class="cursor"></span>';
+      }
+
+      ensureActivity(sess);
+      updateActivityHeader(sess);
+      const line = document.createElement('div');
+      line.className   = 'tool-call';
+      line.textContent = ` ${msg.name}  ${msg.input}`;
+      sess.activityWrap.appendChild(line);
+      break;
+    }
+
+    case 'compact': {
+      // 20B-2: the loop trimmed old tool output to stay in the model's context
+      // window. Note it in the collapsed Activity block so the answer is untouched.
+      if (!sess) break;
+      ensureActivity(sess);
+      const note = document.createElement('div');
+      note.className   = 'activity-note compact-note';
+      note.textContent = `✂ ${msg.text}`;
+      sess.activityWrap.appendChild(note);
+      break;
+    }
 
     case 'done':
       if (sess?.curBubble) {
@@ -1263,6 +1486,7 @@ window.addEventListener('message', ev => {
         sess.curBubble._raw = '';
         sess.curBubble = null;
       }
+      if (sess) { sess.thinkBlock = null; sess.thinkWrap = null; sess.activityWrap = null; }
       setSessionPending(sid, false);
       if (!sid || sid === activeSessId) { badge.textContent = 'Auto'; badge.style.background = ''; }
       if (sess) sess.pane.scrollTop = sess.pane.scrollHeight;
@@ -1288,6 +1512,10 @@ window.addEventListener('message', ev => {
 
     case 'context':
       updateCtxChip(msg.ctx);
+      break;
+
+    case 'auto-approve-state':
+      syncAutoApproveUI(msg.autoApprove);
       break;
 
     case 'inject':
@@ -1369,7 +1597,7 @@ window.addEventListener('message', ev => {
       inputEl.value = msg.text;
       inputEl.style.fontStyle = '';
       inputEl.style.opacity   = '';
-      inputEl.placeholder     = 'Ask anything… Claude edits files, Gemma answers fast.';
+      inputEl.placeholder     = 'Ask anything… Claude edits files, Kimi answers, Gemma runs locally.';
       isRecording = false;
       micBtn.classList.remove('recording');
       micBtn.title = 'Voice input';
@@ -1383,7 +1611,7 @@ window.addEventListener('message', ev => {
       micBtn.title = 'Voice input';
       inputEl.style.fontStyle = '';
       inputEl.style.opacity   = '';
-      inputEl.placeholder     = 'Ask anything… Claude edits files, Gemma answers fast.';
+      inputEl.placeholder     = 'Ask anything… Claude edits files, Kimi answers, Gemma runs locally.';
       break;
 
     // ── Plan overlay (Phase 10) ───────────────────────────────────────

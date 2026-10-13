@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "motkra": {
+      "command": "node",
+      "args": ["motkra-mcp/index.js"]
+    }
+  }
+}

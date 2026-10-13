@@ -24,6 +24,9 @@ const ipc     = require('./ipc');
 const brain   = require('./brain');
 const voice   = require('./voice');
 const fsTools = require('./fs-tools');
+const consoleTools = require('./console-tools');
+const browser = require('./browser');
+const settings = require('./settings');
 const monitor = require('./email/monitor');
 const gmail   = require('./email/gmail');
 
@@ -149,8 +152,15 @@ ipcMain.on('fs-permission-response', (event, { id, scope }) => {
   resolve(fsTools.SCOPES.includes(scope) ? scope : 'deny');
 });
 
-ipcMain.handle('fs-grants', () => fsTools.listGrants());
-ipcMain.handle('fs-revoke-all', () => { fsTools.revokeAll(); return true; });
+ipcMain.handle('fs-grants', () => [
+  ...fsTools.listGrants().map(g => ({ kind: 'folder', ...g })),
+  ...consoleTools.listGrants().map(g => ({ kind: 'command', ...g })),
+  ...browser.listGrants().map(g => ({ kind: 'site', ...g })),
+]);
+ipcMain.handle('fs-revoke-all', () => {
+  fsTools.revokeAll(); consoleTools.revokeAll(); browser.revokeAll();
+  return true;
+});
 
 ipcMain.handle('query-stream', async (event, { text, history, model = 'auto' }) => {
   const win   = BrowserWindow.fromWebContents(event.sender);
@@ -188,8 +198,44 @@ ipcMain.on('hide-window', () => {
   if (chatWin && !chatWin.isDestroyed()) chatWin.hide();
 });
 
-ipcMain.on('open-vscode', () => {
-  shell.openExternal('vscode://');
+/**
+ * Bring VS Code to the front (or start it). A bare vscode:// URL does nothing when VS Code is
+ * already running, so use the `code` CLI; it gets no API keys from Motkra's environment.
+ */
+function openVSCode() {
+  const file = consoleTools.resolveProgram('code');
+  if (!file) return shell.openExternal('vscode://');
+  const spec = consoleTools.spawnArgs(file, []);
+  require('child_process').spawn(spec.file, spec.args, {
+    detached: true, stdio: 'ignore', windowsHide: true, windowsVerbatimArguments: spec.verbatim,
+    env: consoleTools.childEnv(),
+  }).unref();
+}
+
+ipcMain.on('open-vscode', openVSCode);
+
+// ── Settings: which model providers Motkra may use ───────────────────────
+
+/** Free the local model's memory now instead of after Ollama's keep-alive (default 5 min). */
+function unloadLocalModel() {
+  const body = JSON.stringify({ model: process.env.GEMMA_MODEL || 'gemma4:e2b', keep_alive: 0 });
+  const req = require('http').request({
+    hostname: process.env.OLLAMA_HOST ?? 'localhost', port: parseInt(process.env.OLLAMA_PORT ?? '11434', 10),
+    path: '/api/generate', method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
+  }, res => res.resume());
+  req.on('error', () => {});   // Ollama not running: nothing to unload
+  req.end(body);
+}
+
+ipcMain.handle('settings-get', () => settings.status());
+
+ipcMain.handle('settings-set', (event, update) => {
+  if (!chatWin || event.sender !== chatWin.webContents) return settings.status();
+  const before = settings.load();
+  const after = settings.save(update);
+  if (before.providers.local && !after.providers.local) unloadLocalModel();
+  return settings.status();
 });
 
 ipcMain.handle('get-config', () => ({
@@ -344,7 +390,7 @@ app.whenReady().then(() => {
   // System tray icon and context menu
   tray.createTray({
     onOpenChat:    createChatWindow,
-    onOpenVSCode:  () => shell.openExternal('vscode://'),
+    onOpenVSCode:  openVSCode,
     onQuit:        () => app.quit(),
     onEmailToggle: toggleEmailMonitor,
   });
@@ -414,6 +460,7 @@ function toggleEmailMonitor() {
 app.on('will-quit', () => {
   globalShortcut.unregisterAll();
   brain.stop();
+  browser.close();
   ipc.stopServer();
   voice.stop();
   if (_emailRunning) monitor.stop();

@@ -2,7 +2,10 @@
 
 const path  = require('path');
 const fs    = require('fs');
-const { exec } = require('child_process');
+const { runAllowed, tokenize } = require('./core/command');
+const { isMutatingGit } = require('./core/branch-guard');
+const { formatNoMatchHint } = require('./core/fuzzy-match');
+const { guardContext } = require('./core/context-guard');
 
 let vscode;
 try { vscode = require('vscode'); } catch { vscode = null; }
@@ -10,6 +13,7 @@ try { vscode = require('vscode'); } catch { vscode = null; }
 const os = require('os');
 
 const { default: Anthropic } = require('@anthropic-ai/sdk');
+const { streamKimi } = require('./clients/kimi');
 let client = null;
 function getClient() {
   if (!client) client = new Anthropic();
@@ -75,7 +79,7 @@ const TOOLS = [
     description:
       'Run a shell command in the workspace. ' +
       'Use for npm, pytest, git, python, node, etc. ' +
-      'Only executables in motkra.allowedCommands are permitted.',
+      'Only executables in motkra.allowedCommands are permitted. No shell: pipes, && and redirection are not supported.',
     input_schema: {
       type: 'object',
       properties: {
@@ -127,11 +131,35 @@ const TOOLS = [
 // ── Workspace helpers ─────────────────────────────────────────────────────────
 
 function workspaceRoot() {
-  return vscode?.workspace?.workspaceFolders?.[0]?.uri?.fsPath ?? process.cwd();
+  return fs.realpathSync(vscode?.workspace?.workspaceFolders?.[0]?.uri?.fsPath ?? process.cwd());
 }
 
-function resolvePath(p) {
-  return path.isAbsolute(p) ? p : path.join(workspaceRoot(), p);
+/** @param {string} [root]  the session's root: the workspace, or Motkra's worktree once it moved there */
+function resolvePath(p, root = workspaceRoot()) {
+  const full = path.resolve(root, p);
+  const isWithinRoot = candidate => {
+    const relative = path.relative(root, candidate);
+    return relative === '' || (!path.isAbsolute(relative) && relative !== '..' && !relative.startsWith(`..${path.sep}`));
+  };
+
+  if (!isWithinRoot(full)) throw new Error('File paths must stay inside the workspace.');
+
+  let existing = full;
+  while (true) {
+    try {
+      fs.lstatSync(existing);
+      break;
+    } catch (err) {
+      if (err.code !== 'ENOENT') throw err;
+      const parent = path.dirname(existing);
+      if (parent === existing) throw new Error('Could not resolve a path inside the workspace.');
+      existing = parent;
+    }
+  }
+  if (!isWithinRoot(fs.realpathSync(existing))) {
+    throw new Error('File paths must stay inside the workspace.');
+  }
+  return full;
 }
 
 // ── Tool executor ─────────────────────────────────────────────────────────────
@@ -141,91 +169,128 @@ function resolvePath(p) {
  * @param {Object}   input
  * @param {Object}   opts
  * @param {Function} [opts.onDiffRequest]     (id, filePath, before, after) → Promise<boolean>
+ * @param {Function} [opts.onWriteAccessRequest] () → Promise<boolean>
  * @param {string[]} [opts.allowedCommands]
  * @param {number}   [opts.terminalTimeout]   seconds
  */
+/**
+ * Ask whether Motkra may change things at `target`. The answer may move the session to another
+ * root (Motkra's own worktree), in which case the change must be made there instead.
+ * @returns {Promise<{ok:boolean, root?:string, message?:string}>}
+ */
+async function requestWrite(onWriteAccessRequest, target) {
+  if (!onWriteAccessRequest) return { ok: false };
+  const answer = await onWriteAccessRequest(target);
+  return typeof answer === 'boolean' ? { ok: answer } : answer;
+}
+
+const noteOf = access => (access.message ? `\n(${access.message})` : '');
+
 async function executeTool(name, input, opts = {}) {
-  const { onDiffRequest, allowedCommands, terminalTimeout } = opts;
+  const { onDiffRequest, onWriteAccessRequest, allowedCommands, terminalTimeout, onActionApproval } = opts;
+  // Cline-style per-category gate for read / web / command tools. When no callback
+  // is wired (unit tests, the daemon's own executor), fall back to allowing — so this
+  // changes nothing until the extension passes onActionApproval.
+  const approveAction = (category, describe) =>
+    onActionApproval ? onActionApproval(category, describe) : Promise.resolve(true);
+  let root = opts.root ?? workspaceRoot();
 
   switch (name) {
 
     case 'read_file': {
-      return fs.readFileSync(resolvePath(input.path), 'utf8');
+      if (!(await approveAction('read', `read the file ${input.path}`)))
+        return `Read not approved by user: ${input.path}`;
+      return fs.readFileSync(resolvePath(input.path, root), 'utf8');
     }
 
     case 'write_file': {
-      const full = resolvePath(input.path);
+      const access = await requestWrite(onWriteAccessRequest, resolvePath(input.path, root));
+      if (!access.ok) return access.message ?? `Write access denied: ${input.path}`;
+      if (access.root) root = access.root;
+      const full = resolvePath(input.path, root);
       let before = '';
-      try { before = fs.readFileSync(full, 'utf8'); } catch { /* new file */ }
-
-      if (onDiffRequest && before !== input.content) {
-        const id       = `diff_${Date.now()}`;
-        const accepted = await onDiffRequest(id, input.path, before, input.content);
-        if (!accepted) return `Edit rejected by user: ${input.path}`;
+      let exists = true;
+      try { before = fs.readFileSync(full, 'utf8'); }
+      catch (err) {
+        if (err.code !== 'ENOENT') throw err;
+        exists = false;
       }
+
+      if (exists && before === input.content) return `No changes needed: ${input.path}${noteOf(access)}`;
+      const id       = nextDiffId();
+      const accepted = await onDiffRequest?.(id, input.path, before, input.content);
+      if (!accepted) return `Edit rejected by user: ${input.path}`;
 
       fs.mkdirSync(path.dirname(full), { recursive: true });
       fs.writeFileSync(full, input.content, 'utf8');
-      return `Wrote ${input.path}`;
+      return `Wrote ${input.path}${noteOf(access)}`;
     }
 
     case 'str_replace': {
-      const full    = resolvePath(input.path);
+      const access = await requestWrite(onWriteAccessRequest, resolvePath(input.path, root));
+      if (!access.ok) return access.message ?? `Write access denied: ${input.path}`;
+      if (access.root) root = access.root;
+      const full    = resolvePath(input.path, root);
       const content = fs.readFileSync(full, 'utf8');
       if (!content.includes(input.old_text)) {
-        throw new Error(`Text not found in ${input.path}: "${input.old_text.slice(0, 60)}"`);
+        // Actionable self-correction feedback (whitespace vs. genuinely absent,
+        // plus the closest real section) so the model can fix old_string and retry
+        // on its own instead of failing or repeating the same bad string.
+        return formatNoMatchHint(input.old_text, content, input.path);
       }
       const newContent = content.replace(input.old_text, input.new_text);
 
-      if (onDiffRequest) {
-        const id       = `diff_${Date.now()}`;
-        const accepted = await onDiffRequest(id, input.path, content, newContent);
-        if (!accepted) return `Edit rejected by user: ${input.path}`;
-      }
+      if (content === newContent) return `No changes needed: ${input.path}${noteOf(access)}`;
+      const id       = nextDiffId();
+      const accepted = await onDiffRequest?.(id, input.path, content, newContent);
+      if (!accepted) return `Edit rejected by user: ${input.path}`;
 
       fs.writeFileSync(full, newContent, 'utf8');
-      return `Edited ${input.path}`;
+      return `Edited ${input.path}${noteOf(access)}`;
     }
 
     case 'list_files': {
-      const dir     = input.path ? resolvePath(input.path) : workspaceRoot();
+      if (!(await approveAction('read', `list files in ${input.path || 'the workspace root'}`)))
+        return `Listing not approved by user: ${input.path || 'workspace root'}`;
+      const dir     = input.path ? resolvePath(input.path, root) : root;
       const entries = fs.readdirSync(dir, { withFileTypes: true });
       return entries.map(e => (e.isDirectory() ? `${e.name}/` : e.name)).join('\n');
     }
 
     case 'run_command': {
       const { cmd, cwd: relCwd } = input;
-      const exe = cmd.trim().split(/\s+/)[0];
-
+      if (!(await approveAction('commands', `run the command \`${cmd}\``)))
+        return `Command not approved by user: ${cmd}`;
       const cfg     = vscode?.workspace?.getConfiguration('motkra');
       const allowed = allowedCommands
         ?? cfg?.get('allowedCommands')
         ?? ['npm', 'npx', 'python', 'python3', 'pytest', 'git', 'node'];
-
-      if (!allowed.includes(exe)) {
-        return `Error: '${exe}' is not in motkra.allowedCommands.\nAllowed: ${allowed.join(', ')}`;
-      }
-
       const timeoutMs = ((terminalTimeout ?? cfg?.get('terminalTimeout') ?? 30)) * 1000;
-      const workdir   = relCwd ? resolvePath(relCwd) : workspaceRoot();
-
-      return new Promise(res => {
-        exec(cmd, { cwd: workdir, timeout: timeoutMs }, (err, stdout, stderr) => {
-          const out = [stdout, stderr].filter(Boolean).join('\n').trim();
-          if (out)           res(out);
-          else if (err?.code) res(`Exit code ${err.code}`);
-          else               res('Done (no output)');
-        });
-      });
+      let workdir     = relCwd ? resolvePath(relCwd, root) : root;
+      // git commands that change the repository obey the same branch/worktree rules as file writes.
+      let argv = [];
+      try { argv = tokenize(String(cmd ?? '')); } catch { /* runAllowed reports the parse error */ }
+      let note = '';
+      if (isMutatingGit(argv)) {
+        const access = await requestWrite(onWriteAccessRequest, workdir);
+        if (!access.ok) return access.message ?? `Not allowed to change the repository here: ${cmd}`;
+        if (access.root) workdir = relCwd ? resolvePath(relCwd, access.root) : access.root;
+        note = noteOf(access);
+      }
+      return (await runAllowed(String(cmd ?? ''), { cwd: workdir, allowed, timeoutMs })) + note;
     }
 
     case 'web_search': {
+      if (!(await approveAction('web', `search the web for "${input.query}"`)))
+        return `Web search not approved by user: ${input.query}`;
       const cfg      = vscode?.workspace?.getConfiguration('motkra');
       const braveKey = cfg?.get('braveSearchKey') ?? '';
       return await searchWeb(input.query, braveKey);
     }
 
     case 'fetch_url': {
+      if (!(await approveAction('web', `fetch the URL ${input.url}`)))
+        return `Fetch not approved by user: ${input.url}`;
       return await fetchUrl(input.url);
     }
 
@@ -275,8 +340,14 @@ async function executeTool(name, input, opts = {}) {
 
 // ── Agentic loop ─────────────────────────────────────────────────────────────
 
+// Monotonic diff-id counter. Timestamps alone can collide when two writes land in
+// the same millisecond (chat multi-tool turns, or subtasks in /plan); a duplicate
+// id would overwrite the pending resolver and hang that edit forever.
+let _diffSeq = 0;
+const nextDiffId = () => `diff_${Date.now()}_${++_diffSeq}`;
+
 /**
- * Run Claude with file + terminal tools until it produces a final answer.
+ * Run Claude with workspace tools until it produces a final answer.
  *
  * @param {Array}    history          Conversation so far [{role, content}]
  * @param {string}   system           System prompt string
@@ -286,18 +357,29 @@ async function executeTool(name, input, opts = {}) {
  * @param {Function} [onDiffRequest]  Called before a file write; returns Promise<boolean>
  * @param {Function} [onUsage]        Called with {inputTokens, outputTokens} after each LLM turn
  * @param {Object}   [toolOpts]       Forwarded to executeTool (allowedCommands, terminalTimeout)
+ * @param {Function} [onThinking]     Called with adaptive-thinking text
+ * @param {Function} [onCompact]      Called with {droppedChars} when the context is auto-compacted (20B-2)
  */
-async function runAgent(history, system, onToken, onTool, onDone, onDiffRequest, onUsage, toolOpts) {
-  const messages = history
+async function runAgent(history, system, onToken, onTool, onDone, onDiffRequest, onUsage, toolOpts, onThinking, onCompact) {
+  let messages = history
     .filter(m => m.role === 'user' || m.role === 'assistant')
     .map(m => ({ role: m.role, content: m.content }));
 
   const cfg   = vscode?.workspace?.getConfiguration('motkra');
   const model = cfg?.get('claudeModel') ?? 'claude-opus-4-7';
+  const maxIterations = Math.max(1, Number(cfg?.get('maxAgentIterations') ?? 25));
 
   let fullText = '';
 
-  for (let i = 0; i < 10; i++) {
+  for (let i = 0; i < maxIterations; i++) {
+    // 20B-2: keep the request inside the model's context window instead of
+    // letting a long turn blow past it mid-task. Collapses old tool output.
+    const guard = guardContext(messages);
+    if (guard.needsCompact) {
+      messages = guard.messages;
+      onCompact?.({ droppedChars: guard.droppedChars, tokens: guard.tokens });
+    }
+
     const stream = getClient().messages.stream({
       model,
       max_tokens:    16000,
@@ -309,12 +391,13 @@ async function runAgent(history, system, onToken, onTool, onDone, onDiffRequest,
     });
 
     for await (const event of stream) {
-      if (
-        event.type === 'content_block_delta' &&
-        event.delta.type === 'text_delta'
-      ) {
+      if (event.type !== 'content_block_delta') continue;
+      if (event.delta.type === 'text_delta') {
         onToken(event.delta.text);
         fullText += event.delta.text;
+      } else if (event.delta.type === 'thinking_delta' && onThinking) {
+        // Hidden reasoning from adaptive thinking — surfaced to a collapsible block, not the answer.
+        onThinking(event.delta.thinking ?? '');
       }
     }
 
@@ -354,4 +437,68 @@ async function runAgent(history, system, onToken, onTool, onDone, onDiffRequest,
   onDone(fullText);
 }
 
-module.exports = { runAgent };
+function toKimiTools() {
+  return TOOLS.map(tool => ({
+    type: 'function',
+    function: {
+      name: tool.name,
+      description: tool.description,
+      parameters: tool.input_schema,
+    },
+  }));
+}
+
+/**
+ * Run Kimi with the same workspace tools and per-change review used by Claude.
+ */
+async function runKimiAgent(history, system, onToken, onTool, onDone, onDiffRequest, toolOpts, onThinking, onCompact) {
+  let messages = [
+    { role: 'system', content: system },
+    ...history.filter(m => m.role === 'user' || m.role === 'assistant')
+      .map(m => ({ role: m.role, content: m.content })),
+  ];
+  const tools = toKimiTools();
+  const cfg   = vscode?.workspace?.getConfiguration('motkra');
+  const maxIterations = Math.max(1, Number(cfg?.get('maxAgentIterations') ?? 25));
+  let fullText = '';
+
+  for (let i = 0; i < maxIterations; i++) {
+    // 20B-2: compact old tool output before the request overflows Kimi's context.
+    const guard = guardContext(messages, { window: 128_000 });
+    if (guard.needsCompact) {
+      messages = guard.messages;
+      onCompact?.({ droppedChars: guard.droppedChars, tokens: guard.tokens });
+    }
+
+    const response = await streamKimi(messages, onToken, tools, onThinking);
+    fullText += response.text;
+    if (!response.toolCalls.length) break;
+
+    messages.push({
+      role: 'assistant',
+      content: response.text || null,
+      tool_calls: response.toolCalls,
+    });
+
+    for (const call of response.toolCalls) {
+      const name = call.function.name;
+      let result;
+      try {
+        const input = JSON.parse(call.function.arguments);
+        onTool(name, input);
+        result = await executeTool(name, input, { onDiffRequest, ...toolOpts });
+      } catch (err) {
+        result = `Error: ${err.message}`;
+      }
+      messages.push({
+        role: 'tool',
+        tool_call_id: call.id,
+        content: Array.isArray(result) ? JSON.stringify(result) : String(result),
+      });
+    }
+  }
+
+  onDone(fullText);
+}
+
+module.exports = { executeTool, runAgent, runKimiAgent };

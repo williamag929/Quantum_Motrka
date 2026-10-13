@@ -5,7 +5,8 @@
   "main": "index.js",
   "bin": { "motkra-mcp": "./index.js" },
   "scripts": {
-    "start": "node index.js"
+    "start": "node index.js",
+    "test": "node --test"
   },
   "engines": { "node": ">=18" },
   "dependencies": {}

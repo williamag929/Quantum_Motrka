@@ -1,6 +1,6 @@
 # Motkra — VS Code Extension
 
-A VS Code sidebar extension that combines **Claude** (cloud, agentic) and **Gemma 4** (local, fast) in a single chat panel — like GitHub Copilot but with two models and direct file editing.
+A VS Code sidebar extension that combines **Claude** (cloud, agentic), **Kimi** (NVIDIA cloud), and **Gemma 4** (local, fast) in one chat panel.
 
 ---
 
@@ -8,7 +8,8 @@ A VS Code sidebar extension that combines **Claude** (cloud, agentic) and **Gemm
 
 - **Side panel chat** — Activity Bar icon opens a persistent chat panel
 - **Auto-routing** — short/simple questions go to Gemma 4 locally; complex/code tasks go to Claude
-- **Agentic file editing** — Claude can read, write, and patch files directly (no copy-paste)
+- **Agentic file editing** — Claude and Kimi can inspect, create, and edit multiple workspace files directly
+- **Write consent** — grant workspace access once per VS Code session; review and approve each file diff
 - **Right-click menu** — send selected code to the panel with one click
 - **Streaming** — both models stream tokens in real time
 - **No extra server** — Gemma runs via Ollama locally, Claude via the Anthropic API
@@ -24,6 +25,7 @@ A VS Code sidebar extension that combines **Claude** (cloud, agentic) and **Gemm
 | Ollama | running locally on port 11434 |
 | Gemma 4 model | `ollama pull gemma4:e2b` |
 | Anthropic API key | from [console.anthropic.com](https://console.anthropic.com/) |
+| NVIDIA API key | from [build.nvidia.com](https://build.nvidia.com/) to use Kimi |
 
 ---
 
@@ -32,10 +34,11 @@ A VS Code sidebar extension that combines **Claude** (cloud, agentic) and **Gemm
 ```
 dual_ai_ext/
 ├── extension.js          Main entry point — registers sidebar + right-click commands
-├── agent.js              Claude agentic loop with file tools
+├── agent.js              Claude and Kimi agent loops with shared file tools
 ├── router.js             Auto-routing logic (local vs cloud)
 ├── clients/
-│   └── gemma.js          Ollama HTTP streaming client
+│   ├── gemma.js          Ollama HTTP streaming client
+│   └── kimi.js           NVIDIA Kimi streaming and tool-call client
 ├── media/
 │   ├── icon.svg          Activity Bar icon
 │   └── panel.html        Chat UI (HTML + CSS + JS)
@@ -62,6 +65,7 @@ The file lives at `dual_ai/.env` (one level up):
 
 ```
 ANTHROPIC_API_KEY=sk-ant-...
+NVIDIA_API_KEY=...
 ```
 
 If you don't have it yet, copy the sample:
@@ -129,6 +133,7 @@ vsce package --no-dependencies
 The badge at the top of the panel shows which model is active:
 
 - `☁ Claude` — Anthropic API, agentic, can edit files
+- `⚡ Kimi` — NVIDIA API, agentic chat with the same workspace tools as Claude
 - `🏠 Gemma 4` — local Ollama, fast, private, no API call
 - `Auto` — will route the next message automatically
 
@@ -183,7 +188,10 @@ The file is edited on disk immediately. VS Code will show the standard "file cha
 | Role | Model ID | Notes |
 |---|---|---|
 | Cloud agent | `claude-opus-4-7` | Adaptive thinking + xhigh effort + prompt caching |
+| Kimi | `moonshotai/kimi-k3` | NVIDIA API; selected explicitly with the Kimi button |
 | Local chat | `gemma4:e2b` | Runs via Ollama on localhost:11434 |
+
+When Claude or Kimi first needs to change a file, Motkra asks for workspace write access for the current VS Code session. Each proposed file change is then shown as a diff and must be approved individually. File tools are restricted to the opened workspace.
 
 ---
 
