@@ -35,6 +35,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Optional
 
+from capabilities import registry as capability_registry
 from config import DAEMON_HOTKEY, DAEMON_PORT, GEMMA_MODEL, VOICE_REPLY
 from privacy import redact
 from session import MODEL_LABEL, MODES, Session, normalize_mode, plan
@@ -236,6 +237,8 @@ def make_handler(daemon: Daemon, port: int):
             if self.path == "/status":
                 self._send(200, {"status": "ok", "mode": daemon.session.mode, "state": daemon.state,
                                  "voice_reply": daemon.voice_reply})
+            elif self.path == "/capabilities":
+                self._send(200, capability_registry())
             else:
                 self._send(404, {"error": "not found"})
 
