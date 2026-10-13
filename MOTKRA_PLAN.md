@@ -413,6 +413,70 @@ Principles:
 
 ---
 
+## Phase 21 — Cline SDK Agent Runtime · Layer 10 (Future)
+*Make the daemon smart, useful and agentic by adopting the [Cline SDK](https://docs.cline.bot/sdk/overview) (`@cline/sdk`) as the execution engine — without giving up the privacy model that makes Motkra Motkra.*
+
+Principles:
+- **The brain stays the gate.** `dual_ai` (routing, `privacy.redact`, personal-topics-stay-local) keeps deciding *what* may leave the machine. The SDK only executes *where the brain allows*.
+- **Two agents, one router.** A `localAgent` (SDK + Ollama/Gemma) and a `cloudAgent` (SDK + Anthropic); `brain.plan()` picks which one runs. Cloud receives redacted text only; `StreamRestorer` restores placeholders on the way back.
+- **Sidecar, not transplant.** The SDK runs as a separate Node 22+ process next to the Python brain (same pattern as `brain.js` spawning `daemon.py`), isolating Electron from ESM/bundling issues.
+- **Verify before trust.** Telemetry and network behavior of `@cline/sdk` is audited *before* any prompt flows through it (opt-out flag/env var; nothing may phone home with content).
+
+### 21A — Spike & Privacy Audit
+- [ ] **21A-1** Install `@cline/sdk` in a scratch project; hello-world `Agent` with `providerId: "ollama"` on the local Gemma model — assert zero cloud traffic (e.g. run offline / with a firewall watch)
+- [ ] **21A-2** Telemetry audit: find the SDK's opt-out (settings flag or env var), document it, set it off by default in Motkra; confirm prompts/code are never sent to Cline servers when using own providers
+- [ ] **21A-3** Decide the process model: SDK inside Electron main vs. Node sidecar (preferred); define the IPC/localhost contract with the daemon
+
+### 21B — Dual-Route Agent Core
+- [ ] **21B-1** `localAgent` (Ollama provider) and `cloudAgent` (Anthropic provider) created per turn from `brain.plan()`'s decision; existing modes (`auto`, `cloud`, `local`, `kimi`) map onto agent choice
+- [ ] **21B-2** Redaction pipeline unchanged: redacted messages in, `brain.StreamRestorer` on the SDK event stream out (`assistant-text-delta`, `tool-started` → chat window over IPC)
+- [ ] **21B-3** Port `fs-tools.js` / `console-tools.js` to `createTool` + Zod schemas; wrap every tool in the `grant-store.js` permission model as an SDK plugin/hook (risk tiers from 19A unchanged)
+- [ ] **21B-4** Structured runs with completion tools (`lifecycle: { completesRun: true }`) for email triage, digests and other batch jobs
+
+### 21C — Agentic Expansion
+- [ ] **21C-1** Mount `motkra-mcp` as an MCP server the agent can call natively (jobs, GitHub, Ollama, disk)
+- [ ] **21C-2** Scheduled agents (SDK cron) take over `email/monitor.js` polling and the daily briefing
+- [ ] **21C-3** Sub-agents for parallel email triage and research tasks, capped by `motkra.maxSubAgents`
+- [ ] **21C-4** Checkpoints for long autonomous runs (undo a whole agent session, not just one edit)
+
+### 21D — Cline Account & ClinePass (Optional Sign-In)
+*The user can optionally sign in with their Cline account to unlock the Cline provider: pay-as-you-go models, ClinePass subscription (2–5x usage on open coding models) and rotating free models — a zero/low-cost cloud lane next to direct Anthropic.*
+
+- [ ] **21D-1** Sign-in from ⚙ Settings (OAuth device flow, same pattern as the GitHub CLI login); token stored in the OS keychain, never in `.env`. Sign-out wipes it
+- [ ] **21D-2** New provider lane `cline` in the router modes (`auto`, `cloud`, `local`, `kimi`, `cline`); model picker lists the user's ClinePass/free models; free models become the default *cloud* suggestion for cost-free routing
+- [ ] **21D-3** **Privacy caveat, stated in the UI:** unlike the direct Anthropic lane, Cline-hosted providers route prompts through Cline's servers (their telemetry can include prompt and response for these requests). Mitigations, enforced not optional: the brain's redaction still runs before every Cline call, personal topics still go local-only, and the lane is off until the user signs in and explicitly enables it
+- [ ] **21D-4** Cost counter (1D) treats ClinePass/free models correctly: free models count as $0, ClinePass usage shows subscription-vs-API savings
+- [ ] **21D-5** Telemetry double-check: enabling the Cline lane must not re-enable SDK/product telemetry (21A-2); document the exact behavior in the privacy section of the README
+
+---
+
+## Phase 22 — Idea Seeds (Semillas) · Layer 11 (Future · Vision)
+*El pensamiento humano nace de semillas e interacciones entre ellas para una nueva idea — human thought is born from seeds, and from the interactions between seeds a new idea emerges. Motkra becomes a place where your ideas are planted, cross-pollinate, and grow into new reasoning.*
+
+Principles:
+- **Seeds are small and yours.** A seed is a short fragment — an idea, a question, a half-formed plan, a quote, a bug that bothered you. Captured in seconds from the tray, the hotkey, voice, or the browser extension. All seeds live locally.
+- **Connection happens offline.** The gardener runs on the local model only (Ollama/Gemma). Seeds never leave the machine — this is the most private layer of Motkra, no routing decision ever sends them to the cloud.
+- **Motkra proposes, you cultivate.** The daemon surfaces surprising connections and new-idea candidates; you decide which ones grow. Rejected connections teach the gardener.
+- **Built on existing layers.** Storage reuses Phase 3 (memory) and Phase 6 (workspace RAG embeddings); proactive surfacing reuses Phase 2 (ambient awareness) and Phase 13 (notifications).
+
+### 22A — Seed Capture
+- [ ] **22A-1** Seed store: `~/.motkra/seeds.db` (SQLite + embeddings, local-only), fields: text, source, timestamp, tags, links
+- [ ] **22A-2** Capture paths: tray quick-note, hotkey voice seed ("plántale una semilla"), chat command `/seed`, browser-extension selection → seed
+- [ ] **22A-3** Seeds are exempt from cloud routing by construction (hard-coded local lane, not a router heuristic)
+
+### 22B — The Gardener (cross-pollination)
+- [ ] **22B-1** Nightly local job: embed new seeds, compute near-neighbors across *distant* topics, and ask the local model "why might these two belong together?" — keep only non-obvious links
+- [ ] **22B-2** Interaction graph: seeds ↔ seeds edges with strength and reason; clusters become "beds" (temas). Decay for stale links, reinforcement when you act on one
+- [ ] **22B-3** New-idea candidates: when a bridge connects two beds for the first time, the gardener drafts a one-paragraph "nueva idea" hypothesis and queues it for you
+
+### 22C — Surfacing & Dialogue
+- [ ] **22C-1** Morning seed card in the daily briefing (13B): "3 seeds that met last night" with the hypothesis and one-tap actions: grow / park / discard
+- [ ] **22C-2** Chat mode `/garden`: talk with your seeds — ask "what connects my quantum notes with the email agent?" and get a reasoning thread with citations to your own seeds
+- [ ] **22C-3** Grown ideas export: promote a hypothesis into a project note, a GitHub issue, or a MOTKRA_PLAN entry (with your approval)
+- [ ] **22C-4** Feedback loop: grow/park/discard signals retrain the link-scoring so the garden adapts to how *you* think
+
+---
+
 ## Settings Reference (all phases combined)
 
 ```json
@@ -442,7 +506,14 @@ Principles:
   "motkra.emailAutoArchiveSpam":  true,
   "motkra.emailAutoSendThreshold": 6,
   "motkra.mcpServer":             false,
-  "motkra.mcpPort":               3333
+  "motkra.mcpPort":               3333,
+  "motkra.clineSdkRuntime":       false,
+  "motkra.clineSdkTelemetry":     false,
+  "motkra.clineAccount":          "",
+  "motkra.clineProvider":         false,
+  "motkra.seedsEnabled":          false,
+  "motkra.seedsNightlyGardener":  true,
+  "motkra.seedsInBriefing":       true
 }
 ```
 
@@ -464,3 +535,5 @@ Principles:
 | 9 | MCP server — expose Ollama to Claude Desktop | Ecosystem tier |
 | Future | Remote approval via Telegram / Slack / email / phone call — no mobile app | "It asks before it acts" |
 | 10 | Secure console + Motkra Browser (own Chromium) | "It has hands" |
+| Future | Cline SDK agent runtime — dual-route local/cloud agents, MCP tools, scheduled jobs | Agentic core tier |
+| Future | Idea Seeds (Semillas) — local idea garden that connects your seeds into new reasoning | "It thinks with me" |
