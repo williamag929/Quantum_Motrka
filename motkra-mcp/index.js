@@ -44,6 +44,7 @@ const { JobQueue } = require('./jobs');
 const { DiskJobs } = require('./disk-jobs');
 const { DIGEST_MODEL, ollamaChat, digestChat, ollamaListModels } = require('./ollama');
 const gh = require('./github');
+const { runTask } = require('./task');
 
 const DEFAULT_WAIT = 45;
 // Some clients give up on a tool call after 60 s (Claude's remote bridge did), and a call
@@ -181,6 +182,27 @@ const TOOLS = [
         number: { type: 'integer', description: 'PR number' },
       },
       required: ['repo', 'number'],
+    },
+  },
+  {
+    name:        'motkra_task',
+    description:
+      'Delegate a complete, multi-step coding task to Motkra, an autonomous agent on this machine. It reads and ' +
+      'edits files, runs commands and tests, and self-corrects until the goal is met, then reports what it ' +
+      'changed. Use it for hands-off work you would otherwise do step by step ("add input validation to the ' +
+      'signup form and run the tests", "refactor module X and fix what breaks"). It runs the full agent loop ' +
+      'with its own tools; every action is logged so you stay the supervisor. Needs the Anthropic API key in ' +
+      'the server\'s environment. Writes are auto-applied (set MOTKRA_TASK_REQUIRE_APPROVAL=1 for a dry-run ' +
+      'that refuses writes and only reports them). Prefer doing simple things yourself; reserve this for ' +
+      'longer autonomous tasks.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        goal:    { type: 'string', description: 'The task for the agent to carry out end to end' },
+        root:    { type: 'string', description: 'Workspace folder the tools are confined to (defaults to the server cwd)' },
+        allowedCommands: { type: 'array', items: { type: 'string' }, description: 'run_command allowlist (defaults to a safe set)' },
+      },
+      required: ['goal'],
     },
   },
 ];
@@ -323,6 +345,16 @@ function createHandler(deps) {
           if (!args.repo || !args.number) return err(-32602, '"repo" and "number" are required');
           try { return ok(text(await gh.listPRFiles(args.repo, Number(args.number), gtoken))); }
           catch (e) { return ok(failure(e.message)); }
+        }
+
+        if (name === 'motkra_task') {
+          if (!args.goal) return err(-32602, '"goal" is required');
+          try {
+            const r = await runTask(args.goal, { root: args.root, allowedCommands: args.allowedCommands });
+            return ok(text(r.transcript));
+          } catch (e) {
+            return ok(failure(e.message));
+          }
         }
 
         return err(-32601, `Unknown tool: ${name}`);
