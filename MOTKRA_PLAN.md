@@ -496,18 +496,18 @@ Principles:
 *Motkra knows who it is and what it can do — and says so truthfully. Today, asked "¿qué puedes hacer?", it answers as a generic assistant because no prompt ever told it it is Motkra. The brain gets a live model of itself and injects it everywhere.*
 
 Principles:
-- **One identity, every lane.** Local, cloud, Kimi, CLI, tray and extension all speak as Motkra, with the same honest answer about capabilities. (Quick fix already shipped: identity block in `dual_ai/config.py` system prompts.)
+- **One identity, every lane.** Local, cloud, Kimi, CLI, tray and extension all speak as Motkra, with the same honest answer about capabilities. (Quick fix shipped on `feature/motkra-identity`: identity block in `dual_ai/config.py` system prompts, plus the brain-side registry below.)
 - **Truthful by construction.** Capabilities are not hard-coded prose — they are generated from the live registry: which providers are configured (Phase 23), which tools are enabled, which features are on. If email is disabled, Motkra says "I *could* do email, enable it in Settings" instead of claiming it or hiding it.
 - **The brain plans with what it has.** Routing (router v3) and team plans (21F) consult the registry, so Motkra never promises a lane it doesn't have and picks roles from real capabilities.
 - **Honest about limits.** Self-awareness includes knowing the boundary: "that needs a cloud model you haven't configured" is a first-class answer, with the one-click fix attached.
 
 ### 24A — Capability Registry
-- [ ] **24A-1** `GET /capabilities` on the brain: providers available now (23A), tools and their risk tiers (grant-store), feature flags (email, voice, browser, memory, seeds), models loaded in Ollama
+- [x] **24A-1** `GET /capabilities` on the brain: lanes = enabled (daemon settings) AND configured (API key / Ollama reachable with the model installed), features (voice, email, memory), Ollama model list — `dual_ai/capabilities.py`, cached 30s. *(Grant-store tools merge in 24A-3, still open.)*
 - [ ] **24A-2** Registry snapshots on change (provider added, model pulled, feature toggled) — the daemon cache invalidates, next turn already knows
 - [ ] **24A-3** The daemon and `dual_ai_ext` (post-21E) render "What can Motkra do?" panels straight from the registry — docs that can never go stale
 
 ### 24B — Identity Injection
-- [ ] **24B-1** System prompts are assembled as `identity + capabilities-from-registry + lane instructions`; local lane gets a compact version (every token costs latency on CPU)
+- [x] **24B-1** System prompts are assembled as `identity + capabilities-from-registry + lane instructions`; local lane gets a compact version (every token costs latency on CPU). *(Brain side shipped: cloud prompt gets the live "Right now on this machine — …" line; local/personal stay static. Extension side lands with 21E.)*
 - [ ] **24B-2** "Who are you / qué puedes hacer" answered from the registry in the user's language, including what's available-but-disabled and how to enable it
 - [ ] **24B-3** Identity survives summarization: context-guard (20B-2) never compacts the identity block out of a long conversation
 
