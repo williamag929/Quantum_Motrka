@@ -492,6 +492,32 @@ Principles:
 
 ---
 
+## Phase 24 — Self-Awareness: Identity & Capability Registry · Foundation (Future)
+*Motkra knows who it is and what it can do — and says so truthfully. Today, asked "¿qué puedes hacer?", it answers as a generic assistant because no prompt ever told it it is Motkra. The brain gets a live model of itself and injects it everywhere.*
+
+Principles:
+- **One identity, every lane.** Local, cloud, Kimi, CLI, tray and extension all speak as Motkra, with the same honest answer about capabilities. (Quick fix already shipped: identity block in `dual_ai/config.py` system prompts.)
+- **Truthful by construction.** Capabilities are not hard-coded prose — they are generated from the live registry: which providers are configured (Phase 23), which tools are enabled, which features are on. If email is disabled, Motkra says "I *could* do email, enable it in Settings" instead of claiming it or hiding it.
+- **The brain plans with what it has.** Routing (router v3) and team plans (21F) consult the registry, so Motkra never promises a lane it doesn't have and picks roles from real capabilities.
+- **Honest about limits.** Self-awareness includes knowing the boundary: "that needs a cloud model you haven't configured" is a first-class answer, with the one-click fix attached.
+
+### 24A — Capability Registry
+- [ ] **24A-1** `GET /capabilities` on the brain: providers available now (23A), tools and their risk tiers (grant-store), feature flags (email, voice, browser, memory, seeds), models loaded in Ollama
+- [ ] **24A-2** Registry snapshots on change (provider added, model pulled, feature toggled) — the daemon cache invalidates, next turn already knows
+- [ ] **24A-3** The daemon and `dual_ai_ext` (post-21E) render "What can Motkra do?" panels straight from the registry — docs that can never go stale
+
+### 24B — Identity Injection
+- [ ] **24B-1** System prompts are assembled as `identity + capabilities-from-registry + lane instructions`; local lane gets a compact version (every token costs latency on CPU)
+- [ ] **24B-2** "Who are you / qué puedes hacer" answered from the registry in the user's language, including what's available-but-disabled and how to enable it
+- [ ] **24B-3** Identity survives summarization: context-guard (20B-2) never compacts the identity block out of a long conversation
+
+### 24C — Self-Model in Planning
+- [ ] **24C-1** Router v3 uses the registry: e.g. a request that needs a browser is local-only-until-19B-enabled instead of hallucinating success
+- [ ] **24C-2** Team planner (21F-1a) assigns roles only from real, currently-available lanes and tools
+- [ ] **24C-3** "What changed" digest after updates: Motkra can tell the user what it *learned* (new provider, new tool, new phase shipped) in the daily briefing
+
+---
+
 ## Phase 22 — Idea Seeds (Semillas) · Layer 11 (Future · Vision)
 *El pensamiento humano nace de semillas e interacciones entre ellas para una nueva idea — human thought is born from seeds, and from the interactions between seeds a new idea emerges. Motkra becomes a place where your ideas are planted, cross-pollinate, and grow into new reasoning.*
 
