@@ -28,6 +28,12 @@
  *   motkra_result       — collect a background digest
  *   ollama_chat         — send messages to any local Ollama model
  *   ollama_list_models  — list all models available on this machine
+ *   github_list_issues  — list issues or PRs in a repo (needs GITHUB_TOKEN for private repos)
+ *   github_get_issue    — read one issue/PR with its body and comments
+ *   github_create_issue — create an issue
+ *   github_comment      — comment on an issue/PR
+ *   github_pr_diff      — a PR's title/state/branches/+additions and how to fetch its diff
+ *   github_pr_files     — the files a PR changed, with each diff patch
  */
 
 const readline = require('readline');
@@ -37,6 +43,7 @@ const { digest, readInputs, pythonRedact } = require('./digest');
 const { JobQueue } = require('./jobs');
 const { DiskJobs } = require('./disk-jobs');
 const { DIGEST_MODEL, ollamaChat, digestChat, ollamaListModels } = require('./ollama');
+const gh = require('./github');
 
 const DEFAULT_WAIT = 45;
 // Some clients give up on a tool call after 60 s (Claude's remote bridge did), and a call
@@ -97,6 +104,84 @@ const TOOLS = [
     name:        'ollama_list_models',
     description: 'List all Ollama models currently available on this machine.',
     inputSchema: { type: 'object', properties: {} },
+  },
+  {
+    name:        'github_list_issues',
+    description: 'List issues (or pull requests) in a GitHub repo. Set pull=true to list PRs instead. Requires GITHUB_TOKEN for private repos and a higher rate limit.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        repo:     { type: 'string', description: 'owner/repo, e.g. williamag929/Quantum_Motrka' },
+        state:    { type: 'string', enum: ['open', 'closed', 'all'], description: 'Default open' },
+        labels:   { type: 'string', description: 'Comma-separated label filter' },
+        per_page: { type: 'integer', description: 'Max results (default 20, max 100)' },
+        pull:     { type: 'boolean', description: 'true = list pull requests instead of issues' },
+      },
+      required: ['repo'],
+    },
+  },
+  {
+    name:        'github_get_issue',
+    description: 'Read one GitHub issue or PR with its body and recent comments — full context for working on it.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        repo:   { type: 'string', description: 'owner/repo' },
+        number: { type: 'integer', description: 'Issue or PR number' },
+      },
+      required: ['repo', 'number'],
+    },
+  },
+  {
+    name:        'github_create_issue',
+    description: 'Create a new issue in a GitHub repo. Needs a token with repo scope.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        repo:   { type: 'string', description: 'owner/repo' },
+        title:  { type: 'string', description: 'Issue title' },
+        body:   { type: 'string', description: 'Issue body (markdown)' },
+        labels: { type: 'array', items: { type: 'string' }, description: 'Labels to apply' },
+      },
+      required: ['repo', 'title'],
+    },
+  },
+  {
+    name:        'github_comment',
+    description: 'Post a comment on a GitHub issue or PR. Needs a token with repo scope.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        repo:   { type: 'string', description: 'owner/repo' },
+        number: { type: 'integer', description: 'Issue or PR number' },
+        body:   { type: 'string', description: 'Comment text (markdown)' },
+      },
+      required: ['repo', 'number', 'body'],
+    },
+  },
+  {
+    name:        'github_pr_diff',
+    description: 'Get a pull request: title, state, branch mapping, +additions/-deletions, and how to fetch its diff locally.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        repo:   { type: 'string', description: 'owner/repo' },
+        number: { type: 'integer', description: 'PR number' },
+      },
+      required: ['repo', 'number'],
+    },
+  },
+  {
+    name:        'github_pr_files',
+    description: 'List the files a pull request changed, with each file\'s diff patch — review a PR without leaving the chat.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        repo:   { type: 'string', description: 'owner/repo' },
+        number: { type: 'integer', description: 'PR number' },
+      },
+      required: ['repo', 'number'],
+    },
   },
 ];
 
@@ -199,6 +284,45 @@ function createHandler(deps) {
           } catch (e) {
             return ok(failure(`Ollama error: ${e.message}`));
           }
+        }
+
+        // ── GitHub tools ─────────────────────────────────────────────────────
+        const gtoken = deps.githubToken ?? process.env.GITHUB_TOKEN ?? '';
+
+        if (name === 'github_list_issues') {
+          if (!args.repo) return err(-32602, '"repo" is required (owner/repo)');
+          try { return ok(text(await gh.listIssues(args.repo, { state: args.state, labels: args.labels, per_page: args.per_page, pull: args.pull }, gtoken))); }
+          catch (e) { return ok(failure(e.message)); }
+        }
+
+        if (name === 'github_get_issue') {
+          if (!args.repo || !args.number) return err(-32602, '"repo" and "number" are required');
+          try { return ok(text(await gh.getIssue(args.repo, Number(args.number), gtoken))); }
+          catch (e) { return ok(failure(e.message)); }
+        }
+
+        if (name === 'github_create_issue') {
+          if (!args.repo) return err(-32602, '"repo" is required');
+          try { return ok(text(await gh.createIssue(args.repo, { title: args.title, body: args.body, labels: args.labels }, gtoken))); }
+          catch (e) { return ok(failure(e.message)); }
+        }
+
+        if (name === 'github_comment') {
+          if (!args.repo || !args.number || !args.body) return err(-32602, '"repo", "number" and "body" are required');
+          try { return ok(text(await gh.comment(args.repo, Number(args.number), args.body, gtoken))); }
+          catch (e) { return ok(failure(e.message)); }
+        }
+
+        if (name === 'github_pr_diff') {
+          if (!args.repo || !args.number) return err(-32602, '"repo" and "number" are required');
+          try { return ok(text(await gh.getPRDiff(args.repo, Number(args.number), gtoken))); }
+          catch (e) { return ok(failure(e.message)); }
+        }
+
+        if (name === 'github_pr_files') {
+          if (!args.repo || !args.number) return err(-32602, '"repo" and "number" are required');
+          try { return ok(text(await gh.listPRFiles(args.repo, Number(args.number), gtoken))); }
+          catch (e) { return ok(failure(e.message)); }
         }
 
         return err(-32601, `Unknown tool: ${name}`);

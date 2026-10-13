@@ -2,7 +2,10 @@
   "mcpServers": {
     "motkra": {
       "command": "node",
-      "args": ["motkra-mcp/index.js"]
+      "args": ["motkra-mcp/index.js"],
+      "env": {
+        "GITHUB_TOKEN": "${env:GITHUB_TOKEN}"
+      }
     }
   }
 }
