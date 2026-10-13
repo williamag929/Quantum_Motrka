@@ -464,6 +464,32 @@ Principles:
 - [ ] **21E-5** Daemon-down behavior: extension detects `/status` failure and offers "Start daemon" (spawns it, like `brain.js` spawns the brain) — never silently falls back to a parallel unredacted path; hard offline mode = local model only
 - [ ] **21E-6** The tray chat migrates onto the same API (dogfooding): `main.js`'s hand-rolled streaming is deleted, both clients proven against one contract test suite
 
+### 21F — Agent Ping-Pong: Brain-Orchestrated Multi-Agent Loops + Live View
+*When a goal needs it, the brain itself spins up multiple agents that talk to each other, split the work and loop until the goal is met — and the user can watch the whole match live, like a ping-pong game. Fun first, secretly also the best debugging tool.*
+
+Principles:
+- **The brain decides.** `brain.plan()` can now answer not just *where* (local/cloud) but *how many*: a team plan with roles, a shared goal and a budget. The static task tree (Phase 10) is the plan; ping-pong is the *emergent* execution.
+- **Every ball passes the gate.** Inter-agent messages flow through the daemon (21E runtime), so redaction and personal-stays-local apply to agent-to-agent traffic too — a cloud agent only ever sees placeholders, a local-only agent can receive the real values.
+- **The loop has a referee.** Max agents, max rounds, token/time budget, loop detection (same argument 3 times = point lost), and Phase 18 approval for anything irreversible. The user can always smash the 🛑 button.
+- **Watch mode is a first-class citizen.** Same event stream (21E-1) that drives the chat drives the visualization — no separate instrumentation to maintain.
+
+### 21F-1 — Team Plans & the Loop
+- [ ] **21F-1a** Brain team planner: goal → roles (researcher, coder, reviewer, critic…), each bound to a provider lane by sensitivity (critic on local can see real values; cloud roles get redacted context)
+- [ ] **21F-1b** Message-passing loop on the SDK sidecar: agents take turns via a shared blackboard (scratchpad + artifact list), each turn routed/redacted by the brain; `completesRun` tools let any agent declare the goal met with evidence
+- [ ] **21F-1c** Termination: goal met, budget exhausted, referee stops a loop, or user interrupts — always ends with a summary (what each agent did, cost per lane, artifacts produced)
+
+### 21F-2 — Referee & Safety
+- [ ] **21F-2a** Limits: `motkra.maxPingPongAgents` (default 4), max rounds, per-match token budget wired into the cost counter (1D)
+- [ ] **21F-2b** Loop guard: detect repeated state/no-progress turns and force a strategy change or stop
+- [ ] **21F-2c** Irreversible actions (send, delete, publish) pause the match and request approval (Phase 18 channels); the match resumes after the answer
+
+### 21F-3 — Ping-Pong View (the fun part 🏓)
+- [ ] **21F-3a** Watch mode in the tray app: a canvas with one node per agent (named, colored by lane — 🟢 local / 🔵 cloud / 🟣 kimi) and an animated ball for every message, with the message preview as the ball's trail
+- [ ] **21F-3b** Scoreboard: rounds, tokens, cost, current rally (who has the ball), goal progress bar; slow-motion toggle and step-by-step replay of a finished match
+- [ ] **21F-3c** Click any ball hit → the exact (redacted) message that agent received and what it answered — ping-pong becomes the loop debugger
+- [ ] **21F-3d** Export a match as an animated GIF/short clip — launch-material gold for Phase 14 (Product Hunt loves a good rally)
+- [ ] **21F-3e** Sound effects (optional, off by default): soft *pock* on each hit, fanfare on goal met — because why not
+
 ---
 
 ## Phase 22 — Idea Seeds (Semillas) · Layer 11 (Future · Vision)
@@ -557,6 +583,8 @@ Principles:
   "motkra.clineSdkTelemetry":     false,
   "motkra.clineAccount":          "",
   "motkra.clineProvider":         false,
+  "motkra.maxPingPongAgents":     4,
+  "motkra.pingPongSounds":        false,
   "motkra.seedsEnabled":          false,
   "motkra.seedsNightlyGardener":  true,
   "motkra.seedsInBriefing":       true
@@ -584,3 +612,4 @@ Principles:
 | Future | Cline SDK agent runtime — dual-route local/cloud agents, MCP tools, scheduled jobs | Agentic core tier |
 | Future | Idea Seeds (Semillas) — local idea garden that connects your seeds into new reasoning | "It thinks with me" |
 | Future | Secrets store + in-app provider setup — no `.env`, keys added in Settings (Cline-style) | "It just works out of the box" |
+| Future | Agent Ping-Pong — brain-orchestrated multi-agent loops with a live match view 🏓 | "Watch my agents play" |
