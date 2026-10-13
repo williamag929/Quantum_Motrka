@@ -25,3 +25,9 @@ Thumbs.db
 
 # Misc
 *.lua
+
+# graphify knowledge-graph output (generated; rebuild with `graphify update .`)
+graphify-out/
+
+# Claude Code local/personal settings (project hooks in .claude/settings.json are committed)
+.claude/settings.local.json
