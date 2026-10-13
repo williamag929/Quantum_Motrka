@@ -442,7 +442,7 @@ Principles:
 ### 21D — Cline Account & ClinePass (Optional Sign-In)
 *The user can optionally sign in with their Cline account to unlock the Cline provider: pay-as-you-go models, ClinePass subscription (2–5x usage on open coding models) and rotating free models — a zero/low-cost cloud lane next to direct Anthropic.*
 
-- [ ] **21D-1** Sign-in from ⚙ Settings (OAuth device flow, same pattern as the GitHub CLI login); token stored in the OS keychain, never in `.env`. Sign-out wipes it
+- [ ] **21D-1** Sign-in from ⚙ Settings (OAuth device flow, same pattern as the GitHub CLI login); token kept in the Motkra secrets store (Phase 23), never in `.env`. Sign-out deletes it
 - [ ] **21D-2** New provider lane `cline` in the router modes (`auto`, `cloud`, `local`, `kimi`, `cline`); model picker lists the user's ClinePass/free models; free models become the default *cloud* suggestion for cost-free routing
 - [ ] **21D-3** **Privacy caveat, stated in the UI:** unlike the direct Anthropic lane, Cline-hosted providers route prompts through Cline's servers (their telemetry can include prompt and response for these requests). Mitigations, enforced not optional: the brain's redaction still runs before every Cline call, personal topics still go local-only, and the lane is off until the user signs in and explicitly enables it
 - [ ] **21D-4** Cost counter (1D) treats ClinePass/free models correctly: free models count as $0, ClinePass usage shows subscription-vs-API savings
@@ -474,6 +474,36 @@ Principles:
 - [ ] **22C-2** Chat mode `/garden`: talk with your seeds — ask "what connects my quantum notes with the email agent?" and get a reasoning thread with citations to your own seeds
 - [ ] **22C-3** Grown ideas export: promote a hypothesis into a project note, a GitHub issue, or a MOTKRA_PLAN entry (with your approval)
 - [ ] **22C-4** Feedback loop: grow/park/discard signals retrain the link-scoring so the garden adapts to how *you* think
+
+---
+
+## Phase 23 — Secrets Store & In-App Provider Setup · Foundation (Future)
+*No more `.env` for API keys. Like Cline, the user adds keys or signs in right inside the app, and Motkra keeps them in its own local data store — usable from the daemon, the brain and the CLI.*
+
+Principles:
+- **The app is the front door.** Every provider is configured from ⚙ Settings: paste an API key into a password field, or press *Sign in* for OAuth providers (Cline account, 21D). No editing files, no restarting with a new env.
+- **Secrets live outside the repo.** Single store at `~/.motkra/secrets.json`, mode `0600`, next to `settings.json`. Nothing secret ever ships in `dual_ai/.env` again — that file keeps only non-secret tuning (ports, models, hotkey).
+- **Encrypted when the OS allows.** The daemon encrypts the store with Electron `safeStorage` (DPAPI on Windows, Keychain on macOS, libsecret on Linux). When no keychain exists (headless Linux), it falls back to the plain `0600` file and says so in the UI.
+- **One store, all runtimes.** The Python brain and the CLI read the same file (with a permissions check); the daemon injects secrets into the brain's child env at spawn, never into its own logs or tool subprocesses (`childEnv` keeps stripping them).
+- **Env vars still win for devs.** Resolution order: process env (dev override) → secrets store → provider unavailable. This keeps CI and power users unblocked.
+
+### 23A — The Store
+- [ ] **23A-1** `secrets.js` in the daemon: `get(key)`, `set(key, value)`, `delete(key)`, `has(key)`; atomic writes (tmp + rename), `0600`, corruption-tolerant load
+- [ ] **23A-2** `safeStorage` encryption when `safeStorage.isEncryptionAvailable()`, with the backend recorded (`keychain` vs `plain`) so the UI can show it; transparent fallback otherwise
+- [ ] **23A-3** Python side: `dual_ai/secrets.py` reading `~/.motkra/secrets.json` (checks it is not group/world-readable); `config.py` consults it after `os.environ`, before giving up
+- [ ] **23A-4** Migration: on first run, import any keys found in `dual_ai/.env` / `~/.motkra/.env` into the store and tell the user those lines can be deleted
+
+### 23B — Provider Setup UI
+- [ ] **23B-1** Provider cards in ⚙ Settings: status dot (configured/missing), password input with show/hide, *Save*, *Remove*, *Test connection* (cheap ping: list models / tiny completion)
+- [ ] **23B-2** *Sign in* buttons for OAuth providers (Cline account per 21D; future: GitHub Copilot-style flows) next to the manual key field — both land in the same store
+- [ ] **23B-3** Empty state for fresh installs: first-run card "Add a provider to start" instead of a silent failure when `.env` is missing
+- [ ] **23B-4** Settings page shows *where* secrets live and how (keychain vs plain file) and a one-click *Reveal data folder*
+
+### 23C — Wiring & Cleanup
+- [ ] **23C-1** `settings.js` provider `configured()` checks the store, not `process.env`; `needs:` labels point at the UI ("add in Settings") instead of env var names
+- [ ] **23C-2** `brain.js` injects store secrets into the spawned brain's env; daemon logs and crash reporters never print values (spot-check with a secret canary)
+- [ ] **23C-3** README: replace "Shared `.env`" with the in-app setup flow; `.env` documented as optional dev override only
+- [ ] **23C-4** Guard: `git status` clean of secrets by construction — store lives in `$HOME`, and a pre-commit check (gitleaks is already in the ecosystem) stays as the second net
 
 ---
 
@@ -537,3 +567,4 @@ Principles:
 | 10 | Secure console + Motkra Browser (own Chromium) | "It has hands" |
 | Future | Cline SDK agent runtime — dual-route local/cloud agents, MCP tools, scheduled jobs | Agentic core tier |
 | Future | Idea Seeds (Semillas) — local idea garden that connects your seeds into new reasoning | "It thinks with me" |
+| Future | Secrets store + in-app provider setup — no `.env`, keys added in Settings (Cline-style) | "It just works out of the box" |
