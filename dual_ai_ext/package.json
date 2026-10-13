@@ -2,13 +2,19 @@
   "name": "motkra",
   "displayName": "Motkra",
   "description": "Privacy-first AI coding agent — Claude, Kimi (NVIDIA), and local models via Ollama",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "publisher": "local",
-  "engines": { "vscode": "^1.80.0" },
-  "categories": ["Other"],
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "Other"
+  ],
   "activationEvents": [],
   "main": "./extension.js",
-  "scripts": { "test": "node --test" },
+  "scripts": {
+    "test": "node --test"
+  },
   "contributes": {
     "viewsContainers": {
       "activitybar": [
@@ -29,13 +35,34 @@
       ]
     },
     "commands": [
-      { "command": "motkra.sendSelection",  "title": "Motkra: Send Selection"          },
-      { "command": "motkra.fixSelection",   "title": "Motkra: Fix This Code"            },
-      { "command": "motkra.reloadAgents",   "title": "Motkra: Reload Agents"            },
-      { "command": "motkra.commitMessage",  "title": "Motkra: Generate Commit Message"  },
-      { "command": "motkra.explainDiff",    "title": "Motkra: Explain Diff"             },
-      { "command": "motkra.reviewPR",       "title": "Motkra: Review PR"                },
-      { "command": "motkra.daemonStatus",  "title": "Motkra: Daemon Status"            }
+      {
+        "command": "motkra.sendSelection",
+        "title": "Motkra: Send Selection"
+      },
+      {
+        "command": "motkra.fixSelection",
+        "title": "Motkra: Fix This Code"
+      },
+      {
+        "command": "motkra.reloadAgents",
+        "title": "Motkra: Reload Agents"
+      },
+      {
+        "command": "motkra.commitMessage",
+        "title": "Motkra: Generate Commit Message"
+      },
+      {
+        "command": "motkra.explainDiff",
+        "title": "Motkra: Explain Diff"
+      },
+      {
+        "command": "motkra.reviewPR",
+        "title": "Motkra: Review PR"
+      },
+      {
+        "command": "motkra.daemonStatus",
+        "title": "Motkra: Daemon Status"
+      }
     ],
     "keybindings": [
       {
@@ -47,8 +74,16 @@
     ],
     "menus": {
       "editor/context": [
-        { "command": "motkra.sendSelection", "when": "editorHasSelection", "group": "motkra@1" },
-        { "command": "motkra.fixSelection",  "when": "editorHasSelection", "group": "motkra@2" }
+        {
+          "command": "motkra.sendSelection",
+          "when": "editorHasSelection",
+          "group": "motkra@1"
+        },
+        {
+          "command": "motkra.fixSelection",
+          "when": "editorHasSelection",
+          "group": "motkra@2"
+        }
       ]
     },
     "configuration": {
@@ -86,19 +121,40 @@
         },
         "motkra.allowedCommands": {
           "type": "array",
-          "items": { "type": "string" },
-          "default": ["npm", "npx", "python", "python3", "pytest", "git", "node"],
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "npm",
+            "npx",
+            "python",
+            "python3",
+            "pytest",
+            "git",
+            "node"
+          ],
           "description": "Executables the terminal tool is allowed to run."
         },
         "motkra.protectedBranches": {
           "type": "array",
-          "items": { "type": "string" },
-          "default": ["main", "master", "develop", "trunk"],
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "main",
+            "master",
+            "develop",
+            "trunk"
+          ],
           "description": "Branches Motkra never changes directly (the repo's default branch is always included). It offers to create its own worktree and branch instead."
         },
         "motkra.requireWorktree": {
           "type": "string",
-          "enum": ["auto", "always", "never"],
+          "enum": [
+            "auto",
+            "always",
+            "never"
+          ],
           "default": "auto",
           "description": "Refuse to change files in a repo's main checkout and work in Motkra's own worktree. auto = when the project's instructions (AGENTS.md, CLAUDE.md…) mention worktrees."
         },
@@ -198,5 +254,10 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.40.0",
     "dotenv": "^16.0.0"
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/williamag929/Quantum_Motrka.git"
+  },
+  "license": "Apache-2.0"
 }
