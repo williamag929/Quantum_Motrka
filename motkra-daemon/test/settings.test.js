@@ -187,3 +187,17 @@ test('auto mode: a tool request on a provider without tools says so', () => {
   assert.equal(r.engine, 'kimi');
   assert.match(r.note, /no tools/);
 });
+
+// ── feedback for values the panel could not save ─────────────────────────
+
+test('rejected: says why a value was not saved, and never repeats a pasted key', () => {
+  assert.deepEqual(settings.rejected({ endpoint: { apiKeyEnv: 'NVIDIA_OPENAPI_KEY' } }), []);
+  const pasted = settings.rejected({ endpoint: { apiKeyEnv: 'nvapi-AbCdEf0123456789' } });
+  assert.equal(pasted.length, 1);
+  assert.match(pasted[0], /name of the variable/);
+  assert.ok(!pasted[0].includes('AbCdEf'));
+  assert.match(settings.rejected({ endpoint: { apiKeyEnv: 'nvidia key' } })[0], /capital letters/);
+  assert.match(settings.rejected({ endpoint: { baseUrl: 'http://example.com' } })[0], /https/);
+  assert.match(settings.rejected({ models: { nvidia: 'bad model' } })[0], /model/i);
+  assert.deepEqual(settings.rejected({ models: { nvidia: '' }, endpoint: {} }), []);
+});

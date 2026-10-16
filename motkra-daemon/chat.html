@@ -415,6 +415,8 @@
   .provider .name { font-size: 13px; }
   .provider .meta { font-size: 11px; color: var(--fg-dim); font-family: 'Cascadia Code', 'Consolas', monospace; }
   .provider.unconfigured { opacity: .55; }
+  #settings-error { display: none; font-size: 11px; line-height: 1.4; color: #e5736b; }
+  #settings-error.visible { display: block; }
   .provider-block { display: flex; flex-direction: column; gap: 4px; }
   .provider-detail { display: grid; grid-template-columns: 1fr auto; gap: 4px 6px; padding: 0 2px 4px; }
   .provider-detail input[type=text] {
@@ -503,6 +505,7 @@
   <div id="settings-modal" role="dialog" aria-labelledby="settings-title">
     <h3 id="settings-title">⚙ Models</h3>
     <div id="provider-list"></div>
+    <div id="settings-error" role="alert"></div>
     <div id="cloud-pref">
       <span>Preferred cloud:</span>
       <label><input type="radio" name="cloud-pref" value="claude"> Claude</label>
@@ -677,6 +680,9 @@ function renderTasks(status) {
 
 function renderSettings(status) {
   renderTasks(status);
+  const errorBox = document.getElementById('settings-error');
+  errorBox.textContent = (status.errors ?? []).join(' ');
+  errorBox.classList.toggle('visible', !!status.errors?.length);
   providerList.replaceChildren(...status.providers.map(p => {
     const block = document.createElement('div');
     block.className = 'provider-block';

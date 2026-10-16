@@ -247,7 +247,8 @@ ipcMain.handle('settings-set', (event, update) => {
   const before = settings.load();
   const after = settings.save(update);
   if (before.providers.local && !after.providers.local) unloadLocalModel();
-  return settings.status();
+  const errors = settings.rejected(update);
+  return errors.length ? { ...settings.status(), errors } : settings.status();
 });
 
 ipcMain.handle('get-config', () => ({

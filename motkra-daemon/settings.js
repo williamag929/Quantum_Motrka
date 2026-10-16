@@ -86,6 +86,26 @@ function save(update = {}) {
   return cur;
 }
 
+/**
+ * Why parts of a UI update would not be saved (empty list = all fine). Messages never repeat
+ * the rejected text: a pasted API key must not travel back to the page.
+ */
+function rejected(update = {}) {
+  const out = [];
+  const env = update.endpoint?.apiKeyEnv;
+  if (typeof env === 'string' && env !== '' && !KEY_ENV_RE.test(env)) {
+    out.push(/^(nvapi-|sk-)/i.test(env) || env.length > 64
+      ? 'That looks like an API key itself. This field takes the name of the variable (for example NVIDIA_OPENAPI_KEY); keep the key in dual_ai/.env.'
+      : 'The variable name must use capital letters, digits and underscores, and start with a letter.');
+  }
+  const url = update.endpoint?.baseUrl;
+  if (typeof url === 'string' && url !== '' && !cleanBaseUrl(url)) out.push('The base URL must start with https:// (http:// only for localhost).');
+  for (const [id, model] of Object.entries(update.models ?? {})) {
+    if (typeof model === 'string' && model !== '' && !MODEL_RE.test(model)) out.push(`The model id for ${id} has characters that are not allowed.`);
+  }
+  return out;
+}
+
 /** The model to use for a provider: the user's choice, else the default. */
 function modelFor(id, s = load()) {
   return s.models[id] || PROVIDERS[id].defaultModel();
@@ -195,4 +215,4 @@ function pickProvider(plan, ctx) {
   return r.blocked ? r : { ...r, note: [why, r.note].filter(Boolean).join(' · ') };
 }
 
-module.exports = { PROVIDERS, load, save, available, status, pickProvider, modelFor, endpointFor, classifyTask };
+module.exports = { PROVIDERS, load, save, available, status, pickProvider, modelFor, endpointFor, classifyTask, rejected };
