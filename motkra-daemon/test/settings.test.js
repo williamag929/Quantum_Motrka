@@ -64,10 +64,11 @@ test('everything off is explained', () => {
 });
 
 test('settings persist, merge partial updates and ignore junk', () => {
-  assert.deepEqual(settings.load(), { providers: ALL, cloudPreference: 'claude' });
+  const core = () => { const { providers, cloudPreference } = settings.load(); return { providers, cloudPreference }; };
+  assert.deepEqual(core(), { providers: ALL, cloudPreference: 'claude' });
   settings.save({ providers: { local: false } });
   settings.save({ cloudPreference: 'nvidia', providers: { claude: 'yes' } });
-  assert.deepEqual(settings.load(), { providers: { local: false, claude: true, nvidia: true }, cloudPreference: 'nvidia' });
+  assert.deepEqual(core(), { providers: { local: false, claude: true, nvidia: true }, cloudPreference: 'nvidia' });
   settings.save({ cloudPreference: 'gpt' });
   assert.equal(settings.load().cloudPreference, 'nvidia');
 });
@@ -81,4 +82,49 @@ test('a provider without its API key is not available', () => {
   assert.equal(row.configured, false);
   assert.equal(row.needs, 'NVIDIA_API_KEY');
   if (saved) process.env.NVIDIA_API_KEY = saved;
+});
+
+// ── model and endpoint settings ──────────────────────────────────────────
+
+test('models: defaults, saved override, and bad ids are ignored', () => {
+  assert.equal(settings.modelFor('claude'), 'claude-opus-4-7');
+  assert.equal(settings.modelFor('nvidia'), 'moonshotai/kimi-k2.6');
+  settings.save({ models: { nvidia: 'nvidia/nemotron-3-super-120b-a12b' } });
+  assert.equal(settings.modelFor('nvidia'), 'nvidia/nemotron-3-super-120b-a12b');
+  assert.equal(settings.status().providers.find(p => p.id === 'nvidia').model, 'nvidia/nemotron-3-super-120b-a12b');
+  settings.save({ models: { nvidia: 'bad model; rm' } });
+  assert.equal(settings.modelFor('nvidia'), 'nvidia/nemotron-3-super-120b-a12b');
+  settings.save({ models: { nvidia: '' } });   // empty resets to the default
+  assert.equal(settings.modelFor('nvidia'), 'moonshotai/kimi-k2.6');
+});
+
+test('endpoint: default is NVIDIA, https or localhost http only', () => {
+  assert.equal(settings.endpointFor().baseUrl, 'https://integrate.api.nvidia.com/v1');
+  assert.equal(settings.endpointFor().apiKeyEnv, 'NVIDIA_API_KEY');
+  settings.save({ endpoint: { baseUrl: 'ftp://x' } });
+  settings.save({ endpoint: { baseUrl: 'http://example.com/v1' } });
+  assert.equal(settings.endpointFor().baseUrl, 'https://integrate.api.nvidia.com/v1');
+  settings.save({ endpoint: { baseUrl: 'http://localhost:1234/v1/', apiKeyEnv: 'MY_KEY' } });
+  assert.equal(settings.endpointFor().baseUrl, 'http://localhost:1234/v1');
+  assert.equal(settings.endpointFor().apiKeyEnv, 'MY_KEY');
+  settings.save({ endpoint: { apiKeyEnv: 'not a var' } });
+  assert.equal(settings.endpointFor().apiKeyEnv, 'MY_KEY');
+});
+
+test('endpoint: the key comes from the environment and is never saved or reported', () => {
+  process.env.MY_KEY = 'secret-value-123';
+  assert.equal(settings.endpointFor().apiKey, 'secret-value-123');
+  const onDisk = fs.readFileSync(path.join(process.env.MOTKRA_DIR, 'settings.json'), 'utf8');
+  assert.ok(!onDisk.includes('secret-value-123'));
+  assert.ok(!JSON.stringify(settings.status()).includes('secret-value-123'));
+  delete process.env.MY_KEY;
+});
+
+test('settings written by an older version load with the new defaults', () => {
+  fs.writeFileSync(path.join(process.env.MOTKRA_DIR, 'settings.json'),
+    JSON.stringify({ providers: { local: true, claude: false, nvidia: true }, cloudPreference: 'nvidia' }));
+  const s = settings.load();
+  assert.equal(s.providers.claude, false);
+  assert.equal(settings.modelFor('nvidia', s), 'moonshotai/kimi-k2.6');
+  assert.equal(settings.endpointFor(s).baseUrl, 'https://integrate.api.nvidia.com/v1');
 });
