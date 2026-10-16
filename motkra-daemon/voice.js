@@ -13,6 +13,9 @@ const { PYTHON } = require('./brain');
 
 const WORKER   = path.join(__dirname, '..', 'dual_ai', 'voice_worker.py');
 const FALLBACK = path.join(__dirname, 'voice', 'stt-win.ps1');
+const FALLBACK_HINT = process.platform === 'win32'
+  ? 'using Windows speech recognition'
+  : 'voice off (install the extras: pip install -r dual_ai/requirements-daemon.txt)';
 
 let _worker   = null;
 let _state    = 'off';   // 'off' | 'starting' | 'ready' | 'failed'
@@ -58,7 +61,7 @@ function send(cmd) {
 function start() {
   if (_worker || _state === 'failed') return;
   if (!fs.existsSync(WORKER)) {
-    console.warn('[voice] dual_ai/voice_worker.py not found — using Windows speech recognition');
+    console.warn(`[voice] dual_ai/voice_worker.py not found — ${FALLBACK_HINT}`);
     _state = 'failed';
     return;
   }
@@ -78,7 +81,7 @@ function start() {
   _worker.on('close', code => {
     _worker = null;
     if (_stopping) { _state = 'off'; return; }
-    console.warn(`[voice] worker exited (${code}) — using Windows speech recognition`);
+    console.warn(`[voice] worker exited (${code}) — ${FALLBACK_HINT}`);
     _state = 'failed';
     if (_onText) startWinStt();   // keep listening with the fallback
   });
@@ -99,7 +102,8 @@ function stop() {
 function listen(onText) {
   _onText = onText;
   if (_worker) send({ cmd: 'listen' });
-  else startWinStt();
+  else if (process.platform === 'win32') startWinStt();
+  else console.warn('[voice] local voice worker unavailable — install the extras: pip install -r dual_ai/requirements-daemon.txt');
 }
 
 function stopListening() {
@@ -122,10 +126,11 @@ function hush() {
 // ── Fallback: Windows System.Speech via PowerShell ────────────────────────
 
 function startWinStt() {
-  if (_winStt) return;
+  if (_winStt || process.platform !== 'win32') return;
   _winStt = spawn('powershell.exe', [
     '-NonInteractive', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', FALLBACK,
   ], { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
+  _winStt.on('error', err => { console.warn('[stt]', err.message); _winStt = null; });
   _winStt.stdout.on('data', lineSplitter(text => _onText?.(text)));
   _winStt.stderr.on('data', d => console.warn('[stt]', d.toString().trim()));
   _winStt.on('exit', code => { console.log(`[stt] process exited (${code})`); _winStt = null; });

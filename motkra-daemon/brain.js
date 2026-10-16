@@ -11,7 +11,8 @@ const { spawn } = require('child_process');
 
 const PORT    = parseInt(process.env.MOTKRA_BRAIN_PORT ?? '7433', 10);
 const SCRIPT  = path.join(__dirname, '..', 'dual_ai', 'daemon.py');
-const VENV_PY = path.join(__dirname, '..', '.venv', 'Scripts', 'python.exe');   // monorepo dev venv
+const VENV_PY = path.join(__dirname, '..', '.venv',
+  ...(process.platform === 'win32' ? ['Scripts', 'python.exe'] : ['bin', 'python']));   // monorepo dev venv
 const PYTHON  = process.env.MOTKRA_PYTHON ?? (fs.existsSync(VENV_PY) ? VENV_PY : 'python');
 const TIMEOUT = 5000;
 
