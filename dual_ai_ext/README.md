@@ -188,7 +188,7 @@ The file is edited on disk immediately. VS Code will show the standard "file cha
 | Role | Model ID | Notes |
 |---|---|---|
 | Cloud agent | `claude-opus-4-7` | Adaptive thinking + xhigh effort + prompt caching |
-| Kimi | `moonshotai/kimi-k3` | NVIDIA API; selected explicitly with the Kimi button |
+| Kimi | `moonshotai/kimi-k2.6` | NVIDIA API; selected explicitly with the Kimi button |
 | Local chat | `gemma4:e2b` | Runs via Ollama on localhost:11434 |
 
 When Claude or Kimi first needs to change a file, Motkra asks for workspace write access for the current VS Code session. Each proposed file change is then shown as a diff and must be approved individually. File tools are restricted to the opened workspace.

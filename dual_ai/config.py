@@ -7,7 +7,7 @@ load_dotenv(Path(__file__).with_name(".env"))
 
 CLAUDE_MODEL = os.getenv("CLAUDE_MODEL", "claude-opus-5-5")
 GEMMA_MODEL = os.getenv("GEMMA_MODEL", "gemma4:e2b")
-KIMI_MODEL = os.getenv("KIMI_MODEL", "moonshotai/kimi-k3")
+KIMI_MODEL = os.getenv("KIMI_MODEL", "moonshotai/kimi-k2.6")
 # NVIDIA's Kimi K3 returns gibberish at temperature 1.0; 0.6 / 0.95 gives normal answers.
 KIMI_TEMPERATURE = float(os.getenv("KIMI_TEMPERATURE", "0.6"))
 KIMI_TOP_P = float(os.getenv("KIMI_TOP_P", "0.95"))

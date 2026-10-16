@@ -36,7 +36,7 @@ function streamKimi(messages, onToken, tools = null, onReasoning = null) {
   if (!key) return Promise.reject(new Error('NVIDIA_API_KEY is not set in dual_ai/.env'));
 
   const body = JSON.stringify({
-    model: process.env.KIMI_MODEL || 'moonshotai/kimi-k3',
+    model: process.env.KIMI_MODEL || 'moonshotai/kimi-k2.6',
     messages: foldSystem(messages),
     max_tokens: 16384,
     // NVIDIA's Kimi K3 produces gibberish at temperature 1.0 (empty content, random reasoning tokens).
