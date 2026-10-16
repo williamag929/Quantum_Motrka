@@ -24,7 +24,13 @@ const PROVIDERS = {
             configured: s => !!process.env[endpointFor(s).apiKeyEnv], needs: s => endpointFor(s).apiKeyEnv },
 };
 
-const DEFAULTS = { providers: { local: true, claude: true, nvidia: true }, cloudPreference: 'claude' };
+const TASK_KINDS = ['chat', 'agent', 'quick'];
+// mode 'manual': the brain's local/cloud decision plus cloudPreference (how it always worked).
+// mode 'auto':   `tasks` says which provider answers each kind of task (see classifyTask).
+const DEFAULTS = {
+  providers: { local: true, claude: true, nvidia: true }, cloudPreference: 'claude',
+  mode: 'manual', tasks: { chat: 'claude', agent: 'claude', quick: 'local' },
+};
 
 function file() {
   return path.join(process.env.MOTKRA_DIR ?? path.join(os.homedir(), '.motkra'), 'settings.json');
@@ -52,7 +58,10 @@ function load() {
     baseUrl:   cleanBaseUrl(saved.endpoint?.baseUrl) ?? DEFAULT_ENDPOINT.baseUrl,
     apiKeyEnv: KEY_ENV_RE.test(saved.endpoint?.apiKeyEnv ?? '') ? saved.endpoint.apiKeyEnv : DEFAULT_ENDPOINT.apiKeyEnv,
   };
-  return { providers, cloudPreference, models, endpoint };
+  const mode = ['manual', 'auto'].includes(saved.mode) ? saved.mode : DEFAULTS.mode;
+  const tasks = { ...DEFAULTS.tasks };
+  for (const k of TASK_KINDS) if (saved.tasks?.[k] in PROVIDERS) tasks[k] = saved.tasks[k];
+  return { providers, cloudPreference, models, endpoint, mode, tasks };
 }
 
 /** Merge a partial update from the UI, save it, and return the new settings. */
@@ -67,6 +76,8 @@ function save(update = {}) {
     if (v === '') delete cur.models[k];                       // empty: back to the default model
     else if (typeof v === 'string' && MODEL_RE.test(v)) cur.models[k] = v;
   }
+  if (['manual', 'auto'].includes(update.mode)) cur.mode = update.mode;
+  for (const k of TASK_KINDS) if (update.tasks?.[k] in PROVIDERS) cur.tasks[k] = update.tasks[k];
   const url = cleanBaseUrl(update.endpoint?.baseUrl);
   if (url) cur.endpoint.baseUrl = url;
   if (KEY_ENV_RE.test(update.endpoint?.apiKeyEnv ?? '')) cur.endpoint.apiKeyEnv = update.endpoint.apiKeyEnv;
@@ -85,6 +96,19 @@ function endpointFor(s = load()) {
   return { baseUrl: s.endpoint.baseUrl, apiKeyEnv: s.endpoint.apiKeyEnv, apiKey: process.env[s.endpoint.apiKeyEnv] };
 }
 
+const QUICK_MAX_WORDS = 12;
+
+/**
+ * What kind of task is this message? 'agent' needs tools, 'quick' is a short plain question,
+ * everything else is 'chat'. Only used in auto mode.
+ */
+function classifyTask(text, { wantsTools = false } = {}) {
+  if (wantsTools) return 'agent';
+  const t = String(text ?? '').trim();
+  const words = t.split(/\s+/).filter(Boolean).length;
+  return words <= QUICK_MAX_WORDS && !t.includes('```') && !t.includes('\n') ? 'quick' : 'chat';
+}
+
 /** Enabled AND configured, per provider. */
 function available(s = load()) {
   return Object.fromEntries(Object.keys(PROVIDERS).map(k => [k, s.providers[k] && PROVIDERS[k].configured(s)]));
@@ -96,6 +120,8 @@ function status() {
   const avail = available(s);
   return {
     cloudPreference: s.cloudPreference,
+    mode: s.mode,
+    tasks: s.tasks,
     endpoint: { baseUrl: s.endpoint.baseUrl, apiKeyEnv: s.endpoint.apiKeyEnv },
     providers: Object.entries(PROVIDERS).map(([id, p]) => ({
       id, label: p.label, model: modelFor(id, s), enabled: s.providers[id], configured: p.configured(s),
@@ -117,7 +143,7 @@ const PROVIDER_OF = { gemma: 'local', claude: 'claude', kimi: 'nvidia' };
  *   wantsTools       the chat asked for an action that needs tools (only Claude has them)
  * @returns {{engine:'gemma'|'claude'|'kimi', note?:string} | {blocked:string}}
  */
-function pickProvider(plan, { available: av, cloudPreference = 'claude', forced = null, wantsTools = false }) {
+function pickByRules(plan, { available: av, cloudPreference = 'claude', forced = null, wantsTools = false }) {
   if (forced) {
     const provider = PROVIDER_OF[forced];
     if (av[provider]) return { engine: forced };
@@ -151,4 +177,22 @@ function pickProvider(plan, { available: av, cloudPreference = 'claude', forced 
   return { blocked: 'Every model is turned off. Turn one on in ⚙ Settings.' };
 }
 
-module.exports = { PROVIDERS, load, save, available, status, pickProvider, modelFor, endpointFor };
+/**
+ * pickByRules plus auto mode: with mode 'auto' the task table (tasks[taskKind]) chooses the
+ * provider. A forced engine and a private conversation skip it; privacy rules always win.
+ * ctx adds: mode 'manual'|'auto', tasks {chat,agent,quick}, taskKind 'chat'|'agent'|'quick'.
+ */
+function pickProvider(plan, ctx) {
+  const { available: av, forced = null, wantsTools = false, mode = 'manual', tasks = DEFAULTS.tasks, taskKind = 'chat' } = ctx;
+  if (mode !== 'auto' || forced || plan.private) return pickByRules(plan, ctx);
+  const wanted = tasks[taskKind];
+  if (av[wanted]) {
+    const note = wantsTools && wanted !== 'claude' ? `${PROVIDERS[wanted].label} has no tools: answering without them` : undefined;
+    return note ? { engine: ENGINE_OF[wanted], note } : { engine: ENGINE_OF[wanted] };
+  }
+  const r = pickByRules(plan, ctx);
+  const why = `${PROVIDERS[wanted].label} unavailable`;
+  return r.blocked ? r : { ...r, note: [why, r.note].filter(Boolean).join(' · ') };
+}
+
+module.exports = { PROVIDERS, load, save, available, status, pickProvider, modelFor, endpointFor, classifyTask };

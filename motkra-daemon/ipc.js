@@ -259,8 +259,10 @@ async function handleQueryStream(text, history, onToken, model = 'auto', onModel
   let routed = plan;
   if (!forced && wantsTools && plan.target === 'local' && !plan.private) routed = { ...plan, target: 'cloud', reason: 'needs tools' };
 
+  const prefs = settings.load();
   const pick = settings.pickProvider(routed, {
-    available: settings.available(), cloudPreference: settings.load().cloudPreference, forced, wantsTools,
+    available: settings.available(prefs), cloudPreference: prefs.cloudPreference, forced, wantsTools,
+    mode: prefs.mode, tasks: prefs.tasks, taskKind: settings.classifyTask(text, { wantsTools }),
   });
   if (pick.blocked) {
     onModel?.('none');

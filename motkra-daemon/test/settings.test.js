@@ -128,3 +128,62 @@ test('settings written by an older version load with the new defaults', () => {
   assert.equal(settings.modelFor('nvidia', s), 'moonshotai/kimi-k2.6');
   assert.equal(settings.endpointFor(s).baseUrl, 'https://integrate.api.nvidia.com/v1');
 });
+
+// ── tasks and auto mode ──────────────────────────────────────────────────
+
+test('tasks and mode: defaults, save, junk ignored', () => {
+  settings.save({ mode: 'manual', tasks: { chat: 'claude', agent: 'claude', quick: 'local' } });
+  const s = settings.load();
+  assert.equal(s.mode, 'manual');
+  assert.deepEqual(s.tasks, { chat: 'claude', agent: 'claude', quick: 'local' });
+  settings.save({ mode: 'auto', tasks: { quick: 'nvidia', chat: 'bogus', agent: 5 } });
+  const t = settings.load();
+  assert.equal(t.mode, 'auto');
+  assert.deepEqual(t.tasks, { chat: 'claude', agent: 'claude', quick: 'nvidia' });
+  settings.save({ mode: 'robot' });
+  assert.equal(settings.load().mode, 'auto');
+  assert.equal(settings.status().mode, 'auto');
+  assert.deepEqual(settings.status().tasks, t.tasks);
+});
+
+test('classifyTask: tools → agent, short plain → quick, else chat', () => {
+  assert.equal(settings.classifyTask('abre el archivo x', { wantsTools: true }), 'agent');
+  assert.equal(settings.classifyTask('what is a monad?'), 'quick');
+  assert.equal(settings.classifyTask('Explain in detail how the privacy brain decides between the local model and the cloud for every request we send'), 'chat');
+  assert.equal(settings.classifyTask('fix this\n```js\nx=1\n```'), 'chat');
+  assert.equal(settings.classifyTask('line one\nline two'), 'chat');
+});
+
+const AUTO = { mode: 'auto', tasks: { chat: 'claude', agent: 'claude', quick: 'local' } };
+
+test('auto mode: the task table decides the provider', () => {
+  assert.deepEqual(pick(cloud, { ...AUTO, taskKind: 'quick' }), { engine: 'gemma' });
+  assert.deepEqual(pick(local, { ...AUTO, taskKind: 'chat' }), { engine: 'claude' });
+  assert.deepEqual(pick(cloud, { ...AUTO, tasks: { ...AUTO.tasks, chat: 'nvidia' }, taskKind: 'chat' }), { engine: 'kimi' });
+});
+
+test('auto mode: manual mode and forced engines ignore the table', () => {
+  assert.deepEqual(pick(cloud, { mode: 'manual', tasks: AUTO.tasks, taskKind: 'quick' }), { engine: 'claude' });
+  assert.deepEqual(pick(cloud, { ...AUTO, taskKind: 'chat', forced: 'gemma' }), { engine: 'gemma' });
+});
+
+test('auto mode: a private conversation never leaves, whatever the table says', () => {
+  for (const kind of ['chat', 'agent', 'quick']) {
+    const tasks = { chat: 'claude', agent: 'claude', quick: 'nvidia' };
+    assert.deepEqual(pick(priv, { mode: 'auto', tasks, taskKind: kind }), { engine: 'gemma' });
+    const r = pick(priv, { mode: 'auto', tasks, taskKind: kind, available: { ...ALL, local: false } });
+    assert.ok(r.blocked && /private/.test(r.blocked), kind);
+  }
+});
+
+test('auto mode: an unavailable choice falls back with a visible note', () => {
+  const r = pick(cloud, { ...AUTO, taskKind: 'chat', available: { ...ALL, claude: false } });
+  assert.equal(r.engine, 'kimi');
+  assert.match(r.note, /Claude \(Anthropic\) unavailable/);
+});
+
+test('auto mode: a tool request on a provider without tools says so', () => {
+  const r = pick(cloud, { mode: 'auto', tasks: { chat: 'claude', agent: 'nvidia', quick: 'local' }, taskKind: 'agent', wantsTools: true });
+  assert.equal(r.engine, 'kimi');
+  assert.match(r.note, /no tools/);
+});
