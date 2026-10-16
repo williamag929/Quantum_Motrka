@@ -2,6 +2,7 @@
 
 const vscode = require('vscode');
 const path   = require('path');
+const { subscribeTerminalOutput } = require('./terminal-monitor');
 
 const CRASH_PATTERNS = [
   /\bError:\s/,
@@ -61,11 +62,11 @@ function activate(provider) {
   let termTimer   = null;
   let lastCrashAt = 0;
 
-  subs.push(vscode.window.onDidWriteTerminalData(e => {
+  const terminalSub = subscribeTerminalOutput(vscode.window, text => {
     const cfg = vscode.workspace.getConfiguration('motkra');
     if (!cfg.get('proactiveTerminal', true)) return;
 
-    termBuffer += e.data;
+    termBuffer += text;
     clearTimeout(termTimer);
     termTimer = setTimeout(() => {
       const snapshot = termBuffer.slice(-1200);
@@ -82,7 +83,8 @@ function activate(provider) {
         `Diagnose and fix this terminal error:\n\`\`\`\n${clean}\n\`\`\``
       );
     }, 600);
-  }));
+  });
+  if (terminalSub) subs.push(terminalSub);
 
   // ── 2C: Stuck detection ──────────────────────────────────────────────
   const editLog = new Map(); // "filePath:bucket" → { count, firstAt, lastLine }
