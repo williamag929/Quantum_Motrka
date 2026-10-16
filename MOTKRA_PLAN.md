@@ -413,6 +413,168 @@ Principles:
 
 ---
 
+## Phase 21 — Cline SDK Agent Runtime · Layer 10 (Future)
+*Make the daemon smart, useful and agentic by adopting the [Cline SDK](https://docs.cline.bot/sdk/overview) (`@cline/sdk`) as the execution engine — without giving up the privacy model that makes Motkra Motkra.*
+
+Principles:
+- **The brain stays the gate.** `dual_ai` (routing, `privacy.redact`, personal-topics-stay-local) keeps deciding *what* may leave the machine. The SDK only executes *where the brain allows*.
+- **Two agents, one router.** A `localAgent` (SDK + Ollama/Gemma) and a `cloudAgent` (SDK + Anthropic); `brain.plan()` picks which one runs. Cloud receives redacted text only; `StreamRestorer` restores placeholders on the way back.
+- **Sidecar, not transplant.** The SDK runs as a separate Node 22+ process next to the Python brain (same pattern as `brain.js` spawning `daemon.py`), isolating Electron from ESM/bundling issues.
+- **Verify before trust.** Telemetry and network behavior of `@cline/sdk` is audited *before* any prompt flows through it (opt-out flag/env var; nothing may phone home with content).
+
+### 21A — Spike & Privacy Audit
+- [ ] **21A-1** Install `@cline/sdk` in a scratch project; hello-world `Agent` with `providerId: "ollama"` on the local Gemma model — assert zero cloud traffic (e.g. run offline / with a firewall watch)
+- [ ] **21A-2** Telemetry audit: find the SDK's opt-out (settings flag or env var), document it, set it off by default in Motkra; confirm prompts/code are never sent to Cline servers when using own providers
+- [ ] **21A-3** Decide the process model: SDK inside Electron main vs. Node sidecar (preferred); define the IPC/localhost contract with the daemon
+
+### 21B — Dual-Route Agent Core
+- [ ] **21B-1** `localAgent` (Ollama provider) and `cloudAgent` (Anthropic provider) created per turn from `brain.plan()`'s decision; existing modes (`auto`, `cloud`, `local`, `kimi`) map onto agent choice
+- [ ] **21B-2** Redaction pipeline unchanged: redacted messages in, `brain.StreamRestorer` on the SDK event stream out (`assistant-text-delta`, `tool-started` → chat window over IPC)
+- [ ] **21B-3** Port `fs-tools.js` / `console-tools.js` to `createTool` + Zod schemas; wrap every tool in the `grant-store.js` permission model as an SDK plugin/hook (risk tiers from 19A unchanged)
+- [ ] **21B-4** Structured runs with completion tools (`lifecycle: { completesRun: true }`) for email triage, digests and other batch jobs
+
+### 21C — Agentic Expansion
+- [ ] **21C-1** Mount `motkra-mcp` as an MCP server the agent can call natively (jobs, GitHub, Ollama, disk)
+- [ ] **21C-2** Scheduled agents (SDK cron) take over `email/monitor.js` polling and the daily briefing
+- [ ] **21C-3** Sub-agents for parallel email triage and research tasks, capped by `motkra.maxSubAgents`
+- [ ] **21C-4** Checkpoints for long autonomous runs (undo a whole agent session, not just one edit)
+
+### 21D — Cline Account & ClinePass (Optional Sign-In)
+*The user can optionally sign in with their Cline account to unlock the Cline provider: pay-as-you-go models, ClinePass subscription (2–5x usage on open coding models) and rotating free models — a zero/low-cost cloud lane next to direct Anthropic.*
+
+- [ ] **21D-1** Sign-in from ⚙ Settings (OAuth device flow, same pattern as the GitHub CLI login); token kept in the Motkra secrets store (Phase 23), never in `.env`. Sign-out deletes it
+- [ ] **21D-2** New provider lane `cline` in the router modes (`auto`, `cloud`, `local`, `kimi`, `cline`); model picker lists the user's ClinePass/free models; free models become the default *cloud* suggestion for cost-free routing
+- [ ] **21D-3** **Privacy caveat, stated in the UI:** unlike the direct Anthropic lane, Cline-hosted providers route prompts through Cline's servers (their telemetry can include prompt and response for these requests). Mitigations, enforced not optional: the brain's redaction still runs before every Cline call, personal topics still go local-only, and the lane is off until the user signs in and explicitly enables it
+- [ ] **21D-4** Cost counter (1D) treats ClinePass/free models correctly: free models count as $0, ClinePass usage shows subscription-vs-API savings
+- [ ] **21D-5** Telemetry double-check: enabling the Cline lane must not re-enable SDK/product telemetry (21A-2); document the exact behavior in the privacy section of the README
+
+### 21E — One Runtime, Thin Clients (Daemon-Centralized)
+*The daemon owns the only agent runtime (SDK sidecar + privacy brain). The tray chat AND `dual_ai_ext` are both thin clients of it — no duplicated agent loops, routers or privacy scanners in the extension.*
+
+```
+ tray chat (Electron) ┐
+ VS Code ext          ├─→ daemon Agent API (127.0.0.1:7432) ─→ brain gate (7433) ─→ SDK agents (local/cloud)
+ browser ext (future) ┘        single sessions, grants, memory, cost counter
+```
+
+- [ ] **21E-1** Daemon Agent API: streaming endpoint (SSE) on the existing 7432 server — `run(messages, mode, tools-profile)` → routed by the brain, executed by the SDK sidecar, events streamed back; same localhost hardening as the brain (`allowed_request`: Host check, no Origin, JSON only)
+- [ ] **21E-2** `dual_ai_ext` becomes a client: `runAgent`/`runKimiAgent` internals replaced by a daemon client that streams events to the panel; the extension keeps its UX (diff preview, activity blocks, inline completions) but owns zero model traffic
+- [ ] **21E-3** Retire the duplicates: extension's `router.js` and `core/privacy-scanner.js` defer to the brain (single privacy gate); `core/provider-settings.js` reads the daemon's provider state (Phase 23 store) instead of its own keys
+- [ ] **21E-4** Shared state by construction: one session history, one grant/permission store (`grant-store.js` risk tiers apply identically in tray and editor), one memory (Phase 3) and one cost counter (1D) for both surfaces
+- [ ] **21E-5** Daemon-down behavior: extension detects `/status` failure and offers "Start daemon" (spawns it, like `brain.js` spawns the brain) — never silently falls back to a parallel unredacted path; hard offline mode = local model only
+- [ ] **21E-6** The tray chat migrates onto the same API (dogfooding): `main.js`'s hand-rolled streaming is deleted, both clients proven against one contract test suite
+
+### 21F — Agent Ping-Pong: Brain-Orchestrated Multi-Agent Loops + Live View
+*When a goal needs it, the brain itself spins up multiple agents that talk to each other, split the work and loop until the goal is met — and the user can watch the whole match live, like a ping-pong game. Fun first, secretly also the best debugging tool.*
+
+Principles:
+- **The brain decides.** `brain.plan()` can now answer not just *where* (local/cloud) but *how many*: a team plan with roles, a shared goal and a budget. The static task tree (Phase 10) is the plan; ping-pong is the *emergent* execution.
+- **Every ball passes the gate.** Inter-agent messages flow through the daemon (21E runtime), so redaction and personal-stays-local apply to agent-to-agent traffic too — a cloud agent only ever sees placeholders, a local-only agent can receive the real values.
+- **The loop has a referee.** Max agents, max rounds, token/time budget, loop detection (same argument 3 times = point lost), and Phase 18 approval for anything irreversible. The user can always smash the 🛑 button.
+- **Watch mode is a first-class citizen.** Same event stream (21E-1) that drives the chat drives the visualization — no separate instrumentation to maintain.
+
+### 21F-1 — Team Plans & the Loop
+- [ ] **21F-1a** Brain team planner: goal → roles (researcher, coder, reviewer, critic…), each bound to a provider lane by sensitivity (critic on local can see real values; cloud roles get redacted context)
+- [ ] **21F-1b** Message-passing loop on the SDK sidecar: agents take turns via a shared blackboard (scratchpad + artifact list), each turn routed/redacted by the brain; `completesRun` tools let any agent declare the goal met with evidence
+- [ ] **21F-1c** Termination: goal met, budget exhausted, referee stops a loop, or user interrupts — always ends with a summary (what each agent did, cost per lane, artifacts produced)
+
+### 21F-2 — Referee & Safety
+- [ ] **21F-2a** Limits: `motkra.maxPingPongAgents` (default 4), max rounds, per-match token budget wired into the cost counter (1D)
+- [ ] **21F-2b** Loop guard: detect repeated state/no-progress turns and force a strategy change or stop
+- [ ] **21F-2c** Irreversible actions (send, delete, publish) pause the match and request approval (Phase 18 channels); the match resumes after the answer
+
+### 21F-3 — Ping-Pong View (the fun part 🏓)
+- [ ] **21F-3a** Watch mode in the tray app: a canvas with one node per agent (named, colored by lane — 🟢 local / 🔵 cloud / 🟣 kimi) and an animated ball for every message, with the message preview as the ball's trail
+- [ ] **21F-3b** Scoreboard: rounds, tokens, cost, current rally (who has the ball), goal progress bar; slow-motion toggle and step-by-step replay of a finished match
+- [ ] **21F-3c** Click any ball hit → the exact (redacted) message that agent received and what it answered — ping-pong becomes the loop debugger
+- [ ] **21F-3d** Export a match as an animated GIF/short clip — launch-material gold for Phase 14 (Product Hunt loves a good rally)
+- [ ] **21F-3e** Sound effects (optional, off by default): soft *pock* on each hit, fanfare on goal met — because why not
+
+---
+
+## Phase 24 — Self-Awareness: Identity & Capability Registry · Foundation (Future)
+*Motkra knows who it is and what it can do — and says so truthfully. Today, asked "¿qué puedes hacer?", it answers as a generic assistant because no prompt ever told it it is Motkra. The brain gets a live model of itself and injects it everywhere.*
+
+Principles:
+- **One identity, every lane.** Local, cloud, Kimi, CLI, tray and extension all speak as Motkra, with the same honest answer about capabilities. (Quick fix shipped on `feature/motkra-identity`: identity block in `dual_ai/config.py` system prompts, plus the brain-side registry below.)
+- **Truthful by construction.** Capabilities are not hard-coded prose — they are generated from the live registry: which providers are configured (Phase 23), which tools are enabled, which features are on. If email is disabled, Motkra says "I *could* do email, enable it in Settings" instead of claiming it or hiding it.
+- **The brain plans with what it has.** Routing (router v3) and team plans (21F) consult the registry, so Motkra never promises a lane it doesn't have and picks roles from real capabilities.
+- **Honest about limits.** Self-awareness includes knowing the boundary: "that needs a cloud model you haven't configured" is a first-class answer, with the one-click fix attached.
+
+### 24A — Capability Registry
+- [x] **24A-1** `GET /capabilities` on the brain: lanes = enabled (daemon settings) AND configured (API key / Ollama reachable with the model installed), features (voice, email, memory), Ollama model list — `dual_ai/capabilities.py`, cached 30s. *(Grant-store tools merge in 24A-3, still open.)*
+- [ ] **24A-2** Registry snapshots on change (provider added, model pulled, feature toggled) — the daemon cache invalidates, next turn already knows
+- [ ] **24A-3** The daemon and `dual_ai_ext` (post-21E) render "What can Motkra do?" panels straight from the registry — docs that can never go stale
+
+### 24B — Identity Injection
+- [x] **24B-1** System prompts are assembled as `identity + capabilities-from-registry + lane instructions`; local lane gets a compact version (every token costs latency on CPU). *(Brain side shipped: cloud prompt gets the live "Right now on this machine — …" line; local/personal stay static. Extension side lands with 21E.)*
+- [ ] **24B-2** "Who are you / qué puedes hacer" answered from the registry in the user's language, including what's available-but-disabled and how to enable it
+- [ ] **24B-3** Identity survives summarization: context-guard (20B-2) never compacts the identity block out of a long conversation
+
+### 24C — Self-Model in Planning
+- [ ] **24C-1** Router v3 uses the registry: e.g. a request that needs a browser is local-only-until-19B-enabled instead of hallucinating success
+- [ ] **24C-2** Team planner (21F-1a) assigns roles only from real, currently-available lanes and tools
+- [ ] **24C-3** "What changed" digest after updates: Motkra can tell the user what it *learned* (new provider, new tool, new phase shipped) in the daily briefing
+
+---
+
+## Phase 22 — Idea Seeds (Semillas) · Layer 11 (Future · Vision)
+*El pensamiento humano nace de semillas e interacciones entre ellas para una nueva idea — human thought is born from seeds, and from the interactions between seeds a new idea emerges. Motkra becomes a place where your ideas are planted, cross-pollinate, and grow into new reasoning.*
+
+Principles:
+- **Seeds are small and yours.** A seed is a short fragment — an idea, a question, a half-formed plan, a quote, a bug that bothered you. Captured in seconds from the tray, the hotkey, voice, or the browser extension. All seeds live locally.
+- **Connection happens offline.** The gardener runs on the local model only (Ollama/Gemma). Seeds never leave the machine — this is the most private layer of Motkra, no routing decision ever sends them to the cloud.
+- **Motkra proposes, you cultivate.** The daemon surfaces surprising connections and new-idea candidates; you decide which ones grow. Rejected connections teach the gardener.
+- **Built on existing layers.** Storage reuses Phase 3 (memory) and Phase 6 (workspace RAG embeddings); proactive surfacing reuses Phase 2 (ambient awareness) and Phase 13 (notifications).
+
+### 22A — Seed Capture
+- [ ] **22A-1** Seed store: `~/.motkra/seeds.db` (SQLite + embeddings, local-only), fields: text, source, timestamp, tags, links
+- [ ] **22A-2** Capture paths: tray quick-note, hotkey voice seed ("plántale una semilla"), chat command `/seed`, browser-extension selection → seed
+- [ ] **22A-3** Seeds are exempt from cloud routing by construction (hard-coded local lane, not a router heuristic)
+
+### 22B — The Gardener (cross-pollination)
+- [ ] **22B-1** Nightly local job: embed new seeds, compute near-neighbors across *distant* topics, and ask the local model "why might these two belong together?" — keep only non-obvious links
+- [ ] **22B-2** Interaction graph: seeds ↔ seeds edges with strength and reason; clusters become "beds" (temas). Decay for stale links, reinforcement when you act on one
+- [ ] **22B-3** New-idea candidates: when a bridge connects two beds for the first time, the gardener drafts a one-paragraph "nueva idea" hypothesis and queues it for you
+
+### 22C — Surfacing & Dialogue
+- [ ] **22C-1** Morning seed card in the daily briefing (13B): "3 seeds that met last night" with the hypothesis and one-tap actions: grow / park / discard
+- [ ] **22C-2** Chat mode `/garden`: talk with your seeds — ask "what connects my quantum notes with the email agent?" and get a reasoning thread with citations to your own seeds
+- [ ] **22C-3** Grown ideas export: promote a hypothesis into a project note, a GitHub issue, or a MOTKRA_PLAN entry (with your approval)
+- [ ] **22C-4** Feedback loop: grow/park/discard signals retrain the link-scoring so the garden adapts to how *you* think
+
+---
+
+## Phase 23 — Secrets Store & In-App Provider Setup · Foundation (Future)
+*No more `.env` for API keys. Like Cline, the user adds keys or signs in right inside the app, and Motkra keeps them in its own local data store — usable from the daemon, the brain and the CLI.*
+
+Principles:
+- **The app is the front door.** Every provider is configured from ⚙ Settings: paste an API key into a password field, or press *Sign in* for OAuth providers (Cline account, 21D). No editing files, no restarting with a new env.
+- **Secrets live outside the repo.** Single store at `~/.motkra/secrets.json`, mode `0600`, next to `settings.json`. Nothing secret ever ships in `dual_ai/.env` again — that file keeps only non-secret tuning (ports, models, hotkey).
+- **Encrypted when the OS allows.** The daemon encrypts the store with Electron `safeStorage` (DPAPI on Windows, Keychain on macOS, libsecret on Linux). When no keychain exists (headless Linux), it falls back to the plain `0600` file and says so in the UI.
+- **One store, all runtimes.** The Python brain and the CLI read the same file (with a permissions check); the daemon injects secrets into the brain's child env at spawn, never into its own logs or tool subprocesses (`childEnv` keeps stripping them).
+- **Env vars still win for devs.** Resolution order: process env (dev override) → secrets store → provider unavailable. This keeps CI and power users unblocked.
+
+### 23A — The Store
+- [ ] **23A-1** `secrets.js` in the daemon: `get(key)`, `set(key, value)`, `delete(key)`, `has(key)`; atomic writes (tmp + rename), `0600`, corruption-tolerant load
+- [ ] **23A-2** `safeStorage` encryption when `safeStorage.isEncryptionAvailable()`, with the backend recorded (`keychain` vs `plain`) so the UI can show it; transparent fallback otherwise
+- [ ] **23A-3** Python side: `dual_ai/secrets.py` reading `~/.motkra/secrets.json` (checks it is not group/world-readable); `config.py` consults it after `os.environ`, before giving up
+- [ ] **23A-4** Migration: on first run, import any keys found in `dual_ai/.env` / `~/.motkra/.env` into the store and tell the user those lines can be deleted
+
+### 23B — Provider Setup UI
+- [ ] **23B-1** Provider cards in ⚙ Settings: status dot (configured/missing), password input with show/hide, *Save*, *Remove*, *Test connection* (cheap ping: list models / tiny completion)
+- [ ] **23B-2** *Sign in* buttons for OAuth providers (Cline account per 21D; future: GitHub Copilot-style flows) next to the manual key field — both land in the same store
+- [ ] **23B-3** Empty state for fresh installs: first-run card "Add a provider to start" instead of a silent failure when `.env` is missing
+- [ ] **23B-4** Settings page shows *where* secrets live and how (keychain vs plain file) and a one-click *Reveal data folder*
+
+### 23C — Wiring & Cleanup
+- [ ] **23C-1** `settings.js` provider `configured()` checks the store, not `process.env`; `needs:` labels point at the UI ("add in Settings") instead of env var names
+- [ ] **23C-2** `brain.js` injects store secrets into the spawned brain's env; daemon logs and crash reporters never print values (spot-check with a secret canary)
+- [ ] **23C-3** README: replace "Shared `.env`" with the in-app setup flow; `.env` documented as optional dev override only
+- [ ] **23C-4** Guard: `git status` clean of secrets by construction — store lives in `$HOME`, and a pre-commit check (gitleaks is already in the ecosystem) stays as the second net
+
+---
+
 ## Settings Reference (all phases combined)
 
 ```json
@@ -442,7 +604,16 @@ Principles:
   "motkra.emailAutoArchiveSpam":  true,
   "motkra.emailAutoSendThreshold": 6,
   "motkra.mcpServer":             false,
-  "motkra.mcpPort":               3333
+  "motkra.mcpPort":               3333,
+  "motkra.clineSdkRuntime":       false,
+  "motkra.clineSdkTelemetry":     false,
+  "motkra.clineAccount":          "",
+  "motkra.clineProvider":         false,
+  "motkra.maxPingPongAgents":     4,
+  "motkra.pingPongSounds":        false,
+  "motkra.seedsEnabled":          false,
+  "motkra.seedsNightlyGardener":  true,
+  "motkra.seedsInBriefing":       true
 }
 ```
 
@@ -464,3 +635,7 @@ Principles:
 | 9 | MCP server — expose Ollama to Claude Desktop | Ecosystem tier |
 | Future | Remote approval via Telegram / Slack / email / phone call — no mobile app | "It asks before it acts" |
 | 10 | Secure console + Motkra Browser (own Chromium) | "It has hands" |
+| Future | Cline SDK agent runtime — dual-route local/cloud agents, MCP tools, scheduled jobs | Agentic core tier |
+| Future | Idea Seeds (Semillas) — local idea garden that connects your seeds into new reasoning | "It thinks with me" |
+| Future | Secrets store + in-app provider setup — no `.env`, keys added in Settings (Cline-style) | "It just works out of the box" |
+| Future | Agent Ping-Pong — brain-orchestrated multi-agent loops with a live match view 🏓 | "Watch my agents play" |
