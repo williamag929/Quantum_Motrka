@@ -11,7 +11,7 @@ Target: 1,000 GitHub stars. Timeline: ~8 weeks.
 - [x] **P0-1** Rename project to "Motkra" — update `package.json` `name`, `displayName`, activity bar title, README headline
 - [x] **P0-2** Add `.vscodeignore` — exclude `node_modules/`, `.vscode/`, `*.vsix` from package
 - [x] **P0-3** Extract Ollama host/port to VS Code settings (`motkra.ollamaHost`, `motkra.ollamaPort`) — replace hard-coded values in `clients/gemma.js`
-- [ ] **P0-4** Fix README model table — still says `claude-opus-4-6`; update to `claude-opus-4-7`
+- [x] **P0-4** Fix README model table — still says `claude-opus-4-6`; update to `claude-opus-4-7`
 - [x] **P0-5** Add keyboard shortcut `Ctrl+Shift+J` to focus the Motkra panel
 - [x] **P0-6** Add VS Code setting `motkra.claudeModel` so users can override the model without editing code
 
@@ -38,7 +38,7 @@ Target: 1,000 GitHub stars. Timeline: ~8 weeks.
 - [x] **1C-2** Run scanner on user message + attached code before routing — if hit, force `local` regardless of keyword score
 - [x] **1C-3** Show `🔒 Private` badge in panel when privacy override is active
 - [x] **1C-4** Add `motkra.privacyScan` boolean setting (default: `true`)
-- [ ] **1C-5** Log privacy hits to VS Code output channel (what pattern triggered, never the content)
+- [x] **1C-5** Log privacy hits to VS Code output channel (what pattern triggered, never the content)
 
 ### 1D — Cost Savings Counter
 - [x] **1D-1** Track token counts per response — Anthropic SDK returns `usage.input_tokens` + `usage.output_tokens` in `stream.finalMessage()`
@@ -144,7 +144,7 @@ Target: 1,000 GitHub stars. Timeline: ~8 weeks.
 - [x] **6-4** Inject retrieved context into Claude requests as "Relevant workspace files:" appended to user message
 - [x] **6-5** Show `📎 N files` badge in panel header — lights up on indexing complete and on each RAG injection
 - [x] **6-6** Re-index on save/create/delete via `onDidSaveTextDocument`, `onDidCreateFiles`, `onDidDeleteFiles`
-- [x] **6-7** Add `motkra.workspaceIndex` toggle and `motkra.workspaceIndexMaxKB` settings
+- [ ] **6-7** Add `motkra.workspaceIndex` toggle and `motkra.workspaceIndexMaxKB` settings
 
 ---
 
@@ -156,7 +156,7 @@ Target: 1,000 GitHub stars. Timeline: ~8 weeks.
 - [x] **7-3** Implement `motkra.explainDiff` command — `git diff HEAD`, send to panel for explanation
 - [x] **7-4** Register `motkra.reviewPR` command (GitHub API integration pending Phase 13A)
 - [ ] **7-5** Add keyboard shortcuts: `Ctrl+Shift+G M` (commit message), `Ctrl+Shift+G D` (explain diff)
-- [ ] **7-6** Add git context to daily briefing (see Phase 12)
+- [x] **7-6** Add git context to daily briefing (see Phase 12)
 
 ---
 
@@ -248,11 +248,11 @@ Target: 1,000 GitHub stars. Timeline: ~8 weeks.
 - [x] **13A-3** On `motkra.reviewPR`: prompts for `owner/repo#number`, fetches the PR's changed files + diffs via the GitHub API, and injects a review prompt — no longer a stub with an empty diff block
 
 ### 13B — Daily Briefing
-- [ ] **13B-1** Register VS Code task that runs at first window open after 8am (check `globalState.lastBriefing` date)
+- [x] **13B-1** Register VS Code task that runs at first window open after 8am (check `globalState.lastBriefing` date)
 - [ ] **13B-2** Collect: `git log --since=yesterday`, open GitHub issues assigned to user, failing test count from last run, today's calendar events (if integration enabled)
-- [ ] **13B-3** Send to Claude: "Generate a concise morning dev briefing. 5 bullets max."
+- [x] **13B-3** Send to Claude: "Generate a concise morning dev briefing. 5 bullets max."
 - [ ] **13B-4** Display in panel with `📋 Morning Briefing` header — read aloud via TTS if voice enabled
-- [ ] **13B-5** Add `motkra.dailyBriefing` toggle setting
+- [x] **13B-5** Add `motkra.dailyBriefing` toggle setting
 
 ### 13C — Push Notifications
 - [ ] **13C-1** Add `motkra.ntfyTopic` setting (user creates a topic at ntfy.sh)
@@ -290,7 +290,7 @@ Target: 1,000 GitHub stars. Timeline: ~8 weeks.
 - [x] **16-3** Route MCP tool calls directly to Ollama HTTP API — any model the user has installed
 - [x] **16-4** Add `motkra.mcpServer` boolean setting (default: `false`) — when enabled, extension spawns the MCP server on activation
 - [x] **16-5** Add `motkra.mcpPort` setting (default: `3333`) — expose MCP over TCP as well as stdio via `MOTKRA_MCP_PORT` env var
-- [ ] **16-6** Document in README how to connect Claude Desktop to Motkra as an MCP server
+- [x] **16-6** Document in README how to connect Claude Desktop to Motkra as an MCP server
 
 ---
 
