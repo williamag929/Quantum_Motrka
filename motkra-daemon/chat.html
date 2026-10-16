@@ -429,6 +429,12 @@
   .provider-detail .result { grid-column: 1 / -1; font-size: 11px; line-height: 1.35; word-break: break-word; }
   .provider-detail .result.ok  { color: var(--teal); }
   .provider-detail .result.bad { color: #e5736b; }
+  #mode-box { display: flex; flex-direction: column; gap: 6px; font-size: 12px; }
+  #mode-box label { display: flex; gap: 6px; align-items: center; }
+  #task-table { display: none; grid-template-columns: auto 1fr; gap: 4px 10px; align-items: center; padding-left: 4px; }
+  #task-table.visible { display: grid; }
+  #task-table select { padding: 3px 6px; border-radius: 4px; border: 1px solid var(--border); background: var(--bg); color: var(--fg); font-size: 12px; }
+  #task-table .task-name { color: var(--fg-dim); }
   #cloud-pref { display: flex; gap: 14px; font-size: 12px; align-items: center; }
   #cloud-pref label { display: flex; gap: 5px; align-items: center; }
   #settings-close { align-self: flex-end; padding: 6px 14px; border-radius: 5px; border: 1px solid var(--teal);
@@ -501,6 +507,10 @@
       <span>Preferred cloud:</span>
       <label><input type="radio" name="cloud-pref" value="claude"> Claude</label>
       <label><input type="radio" name="cloud-pref" value="nvidia"> NVIDIA</label>
+    </div>
+    <div id="mode-box">
+      <label><input type="checkbox" id="auto-mode"> Choose the model by task (auto)</label>
+      <div id="task-table"></div>
     </div>
     <p class="hint">Pausing Ollama frees its memory. Private conversations only run on Ollama: while it is paused
       Motkra tells you instead of sending them to the cloud. Files, console and browser tools only work with Claude.</p>
@@ -622,7 +632,34 @@ function providerDetail(p, status) {
   return box;
 }
 
+const TASK_LABEL = { chat: 'Chat', agent: 'Agent (tools)', quick: 'Quick answers' };
+
+function renderTasks(status) {
+  const autoBox = document.getElementById('auto-mode');
+  autoBox.checked = status.mode === 'auto';
+  const table = document.getElementById('task-table');
+  table.classList.toggle('visible', status.mode === 'auto');
+  table.replaceChildren(...Object.keys(TASK_LABEL).flatMap(kind => {
+    const label = document.createElement('span');
+    label.className = 'task-name';
+    label.textContent = TASK_LABEL[kind];
+    const select = document.createElement('select');
+    for (const p of status.providers) {
+      const opt = document.createElement('option');
+      opt.value = p.id;
+      opt.textContent = `${p.label} · ${p.model}${p.available ? '' : ' (unavailable)'}`;
+      select.append(opt);
+    }
+    select.value = status.tasks[kind];
+    select.addEventListener('change', async () => {
+      renderSettings(await window.motkra.saveSettings({ tasks: { [kind]: select.value } }));
+    });
+    return [label, select];
+  }));
+}
+
 function renderSettings(status) {
+  renderTasks(status);
   providerList.replaceChildren(...status.providers.map(p => {
     const block = document.createElement('div');
     block.className = 'provider-block';
@@ -656,6 +693,9 @@ async function openSettings() {
 document.getElementById('settings-btn').addEventListener('click', openSettings);
 document.getElementById('settings-close').addEventListener('click', () => settingsOverlay.classList.remove('visible'));
 settingsOverlay.addEventListener('click', e => { if (e.target === settingsOverlay) settingsOverlay.classList.remove('visible'); });
+document.getElementById('auto-mode').addEventListener('change', async e => {
+  renderSettings(await window.motkra.saveSettings({ mode: e.target.checked ? 'auto' : 'manual' }));
+});
 document.querySelectorAll('input[name="cloud-pref"]').forEach(r => r.addEventListener('change', async () => {
   renderSettings(await window.motkra.saveSettings({ cloudPreference: r.value }));
 }));

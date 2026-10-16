@@ -33,7 +33,7 @@ contextBridge.exposeInMainWorld('motkra', {
   /** Model providers (Ollama, Claude, NVIDIA): status for the ⚙ Settings panel. */
   getSettings: () => ipcRenderer.invoke('settings-get'),
 
-  /** Save { providers: {local, claude, nvidia}, cloudPreference, models: {id: model}, endpoint: {baseUrl, apiKeyEnv} }; resolves to the new status. */
+  /** Save { providers: {local, claude, nvidia}, cloudPreference, mode, tasks, models: {id: model}, endpoint: {baseUrl, apiKeyEnv} }; resolves to the new status. */
   saveSettings: update => ipcRenderer.invoke('settings-set', update),
 
   /** Try a provider's chosen model with one token: resolves to { ok, status?, message }. */
