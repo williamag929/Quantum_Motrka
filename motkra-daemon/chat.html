@@ -402,7 +402,7 @@
   #settings-overlay.visible { display: flex; }
   #settings-modal {
     background: var(--bg2); border: 1px solid var(--border); border-radius: 10px;
-    padding: 16px 18px 14px; width: 400px; max-width: calc(100vw - 24px);
+    padding: 16px 18px 14px; width: 440px; max-width: calc(100vw - 24px); max-height: calc(100vh - 24px); overflow-y: auto;
     display: flex; flex-direction: column; gap: 10px; box-shadow: 0 8px 32px rgba(0,0,0,.5);
   }
   #settings-modal h3 { margin: 0; font-size: 14px; }
@@ -415,6 +415,26 @@
   .provider .name { font-size: 13px; }
   .provider .meta { font-size: 11px; color: var(--fg-dim); font-family: 'Cascadia Code', 'Consolas', monospace; }
   .provider.unconfigured { opacity: .55; }
+  .provider-block { display: flex; flex-direction: column; gap: 4px; }
+  .provider-detail { display: grid; grid-template-columns: 1fr auto; gap: 4px 6px; padding: 0 2px 4px; }
+  .provider-detail input[type=text] {
+    min-width: 0; padding: 4px 7px; border-radius: 4px; border: 1px solid var(--border);
+    background: var(--bg); color: var(--fg); font-size: 11px; font-family: 'Cascadia Code', 'Consolas', monospace;
+  }
+  .provider-detail .full { grid-column: 1 / -1; }
+  .provider-detail button {
+    padding: 4px 10px; border-radius: 4px; border: 1px solid var(--border); background: var(--bg3);
+    color: var(--fg); font-size: 11px; cursor: pointer;
+  }
+  .provider-detail .result { grid-column: 1 / -1; font-size: 11px; line-height: 1.35; word-break: break-word; }
+  .provider-detail .result.ok  { color: var(--teal); }
+  .provider-detail .result.bad { color: #e5736b; }
+  #mode-box { display: flex; flex-direction: column; gap: 6px; font-size: 12px; }
+  #mode-box label { display: flex; gap: 6px; align-items: center; }
+  #task-table { display: none; grid-template-columns: auto 1fr; gap: 4px 10px; align-items: center; padding-left: 4px; }
+  #task-table.visible { display: grid; }
+  #task-table select { padding: 3px 6px; border-radius: 4px; border: 1px solid var(--border); background: var(--bg); color: var(--fg); font-size: 12px; }
+  #task-table .task-name { color: var(--fg-dim); }
   #cloud-pref { display: flex; gap: 14px; font-size: 12px; align-items: center; }
   #cloud-pref label { display: flex; gap: 5px; align-items: center; }
   #settings-close { align-self: flex-end; padding: 6px 14px; border-radius: 5px; border: 1px solid var(--teal);
@@ -488,6 +508,10 @@
       <label><input type="radio" name="cloud-pref" value="claude"> Claude</label>
       <label><input type="radio" name="cloud-pref" value="nvidia"> NVIDIA</label>
     </div>
+    <div id="mode-box">
+      <label><input type="checkbox" id="auto-mode"> Choose the model by task (auto)</label>
+      <div id="task-table"></div>
+    </div>
     <p class="hint">Pausing Ollama frees its memory. Private conversations only run on Ollama: while it is paused
       Motkra tells you instead of sending them to the cloud. Files, console and browser tools only work with Claude.</p>
     <button id="settings-close">Done</button>
@@ -560,8 +584,102 @@ const settingsOverlay = document.getElementById('settings-overlay');
 const providerList    = document.getElementById('provider-list');
 const PROVIDER_ICON   = { local: '🏠', claude: '☁', nvidia: '⚡' };
 
+function textInput(value, placeholder, onSave, full = false, suggestionsFor = null) {
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.value = value;
+  input.placeholder = placeholder;
+  input.spellcheck = false;
+  if (full) input.className = 'full';
+  input.addEventListener('change', () => onSave(input.value.trim()));
+  if (suggestionsFor) {
+    // Offer the provider's own model list; fetched once, the first time the field is used.
+    const list = document.createElement('datalist');
+    list.id = `models-${suggestionsFor}`;
+    input.setAttribute('list', list.id);
+    let loaded = false;
+    input.addEventListener('focus', async () => {
+      if (loaded) return;
+      loaded = true;
+      const r = await window.motkra.listProviderModels(suggestionsFor);
+      if (r.ok) list.replaceChildren(...r.models.map(m => { const o = document.createElement('option'); o.value = m; return o; }));
+      else input.title = r.message ?? '';
+    });
+    const wrap = document.createDocumentFragment();
+    wrap.append(input, list);
+    return wrap;
+  }
+  return input;
+}
+
+function providerDetail(p, status) {
+  const box = document.createElement('div');
+  box.className = 'provider-detail';
+  const result = document.createElement('div');
+  result.className = 'result';
+  const test = document.createElement('button');
+  test.textContent = 'Test';
+  test.addEventListener('click', async () => {
+    test.disabled = true;
+    result.className = 'result';
+    result.textContent = 'Testing…';
+    const r = await window.motkra.testProvider(p.id);
+    result.className = 'result ' + (r.ok ? 'ok' : 'bad');
+    result.textContent = (r.ok ? '✓ ' : '✗ ') + (r.status ? `${r.status}: ` : '') + r.message;
+    test.disabled = false;
+  });
+  box.append(
+    textInput(p.model, 'model id', async model => {
+      // Empty means "back to the default"; re-render so the field shows the effective model.
+      renderSettings(await window.motkra.saveSettings({ models: { [p.id]: model } }));
+    }, false, p.id),
+    test,
+  );
+  if (p.id === 'nvidia') {
+    box.append(
+      textInput(status.endpoint.baseUrl, 'https://… (OpenAI-compatible base URL)', async baseUrl => {
+        renderSettings(await window.motkra.saveSettings({ endpoint: { baseUrl } }));
+      }, true),
+      textInput(status.endpoint.apiKeyEnv, 'API key variable in dual_ai/.env', async apiKeyEnv => {
+        renderSettings(await window.motkra.saveSettings({ endpoint: { apiKeyEnv } }));
+      }, true),
+    );
+  }
+  box.append(result);
+  return box;
+}
+
+const TASK_LABEL = { chat: 'Chat', agent: 'Agent (tools)', quick: 'Quick answers' };
+
+function renderTasks(status) {
+  const autoBox = document.getElementById('auto-mode');
+  autoBox.checked = status.mode === 'auto';
+  const table = document.getElementById('task-table');
+  table.classList.toggle('visible', status.mode === 'auto');
+  table.replaceChildren(...Object.keys(TASK_LABEL).flatMap(kind => {
+    const label = document.createElement('span');
+    label.className = 'task-name';
+    label.textContent = TASK_LABEL[kind];
+    const select = document.createElement('select');
+    for (const p of status.providers) {
+      const opt = document.createElement('option');
+      opt.value = p.id;
+      opt.textContent = `${p.label} · ${p.model}${p.available ? '' : ' (unavailable)'}`;
+      select.append(opt);
+    }
+    select.value = status.tasks[kind];
+    select.addEventListener('change', async () => {
+      renderSettings(await window.motkra.saveSettings({ tasks: { [kind]: select.value } }));
+    });
+    return [label, select];
+  }));
+}
+
 function renderSettings(status) {
+  renderTasks(status);
   providerList.replaceChildren(...status.providers.map(p => {
+    const block = document.createElement('div');
+    block.className = 'provider-block';
     const row = document.createElement('label');
     row.className = 'provider' + (p.configured ? '' : ' unconfigured');
     const box = document.createElement('input');
@@ -578,7 +696,8 @@ function renderSettings(status) {
     meta.className = 'meta';
     meta.textContent = p.configured ? `${p.model} · ${p.enabled ? 'on' : 'paused'}` : `add ${p.needs} to dual_ai/.env`;
     row.append(box, name, meta);
-    return row;
+    block.append(row, providerDetail(p, status));
+    return block;
   }));
   document.querySelectorAll('input[name="cloud-pref"]').forEach(r => { r.checked = r.value === status.cloudPreference; });
 }
@@ -591,6 +710,9 @@ async function openSettings() {
 document.getElementById('settings-btn').addEventListener('click', openSettings);
 document.getElementById('settings-close').addEventListener('click', () => settingsOverlay.classList.remove('visible'));
 settingsOverlay.addEventListener('click', e => { if (e.target === settingsOverlay) settingsOverlay.classList.remove('visible'); });
+document.getElementById('auto-mode').addEventListener('change', async e => {
+  renderSettings(await window.motkra.saveSettings({ mode: e.target.checked ? 'auto' : 'manual' }));
+});
 document.querySelectorAll('input[name="cloud-pref"]').forEach(r => r.addEventListener('change', async () => {
   renderSettings(await window.motkra.saveSettings({ cloudPreference: r.value }));
 }));

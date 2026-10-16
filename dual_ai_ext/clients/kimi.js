@@ -1,8 +1,8 @@
 'use strict';
 
+const http  = require('http');
 const https = require('https');
-
-const ENDPOINT = new URL('https://integrate.api.nvidia.com/v1/chat/completions');
+const { kimiConfig } = require('../core/provider-settings');
 
 /**
  * Stream a response from Kimi through NVIDIA's OpenAI-compatible API.
@@ -32,11 +32,13 @@ function reasoningOf(delta = {}) {
 }
 
 function streamKimi(messages, onToken, tools = null, onReasoning = null) {
-  const key = process.env.NVIDIA_API_KEY;
-  if (!key) return Promise.reject(new Error('NVIDIA_API_KEY is not set in dual_ai/.env'));
+  // Model, endpoint and key variable come from the Motkra app's ⚙ Settings (NVIDIA by default).
+  const { model, baseUrl, apiKeyEnv, apiKey: key } = kimiConfig();
+  if (!key) return Promise.reject(new Error(`${apiKeyEnv} is not set in dual_ai/.env`));
+  const endpoint = new URL(`${baseUrl}/chat/completions`);
 
   const body = JSON.stringify({
-    model: process.env.KIMI_MODEL || 'moonshotai/kimi-k3',
+    model,
     messages: foldSystem(messages),
     max_tokens: 16384,
     // NVIDIA's Kimi K3 produces gibberish at temperature 1.0 (empty content, random reasoning tokens).
@@ -47,7 +49,7 @@ function streamKimi(messages, onToken, tools = null, onReasoning = null) {
   });
 
   return new Promise((resolve, reject) => {
-    const req = https.request(ENDPOINT, {
+    const req = (endpoint.protocol === 'http:' ? http : https).request(endpoint, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${key}`,
@@ -60,7 +62,7 @@ function streamKimi(messages, onToken, tools = null, onReasoning = null) {
         let errorBody = '';
         res.setEncoding('utf8');
         res.on('data', chunk => { errorBody += chunk; });
-        res.on('end', () => reject(new Error(`NVIDIA API error ${res.statusCode}: ${errorBody.slice(0, 300)}`)));
+        res.on('end', () => reject(new Error(`${endpoint.hostname} error ${res.statusCode}: ${errorBody.slice(0, 300)}`)));
         return;
       }
 

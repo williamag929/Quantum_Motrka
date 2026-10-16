@@ -1,11 +1,12 @@
 'use strict';
 
-// Kimi through NVIDIA's OpenAI-compatible endpoint (same as dual_ai/kimi_client.py).
+// The OpenAI-compatible lane (engine "kimi"): NVIDIA by default, any other endpoint through
+// ⚙ Settings (settings.endpointFor / settings.modelFor). Same wire format as dual_ai/kimi_client.py.
 // Streams Server-Sent Events; no tools.
 
+const http  = require('http');
 const https = require('https');
-
-const URL_ = new URL('https://integrate.api.nvidia.com/v1/chat/completions');
+const settings = require('./settings');
 
 /**
  * NVIDIA's Kimi K3 answers with garbage ("@ @ @…", empty content) whenever the request has a
@@ -21,18 +22,17 @@ function foldSystem(system, messages) {
 }
 
 /**
- * @param {Array}    messages  prepared payload (redacted by the brain)
- * @param {string}   system
- * @param {Function} onToken
- * @returns {Promise<string>} full reply text (as received; placeholders still in it)
+ * Send one chat request and feed the streamed text to onToken.
+ * Rejects with Error(message) carrying `.status` when the endpoint answers with an error.
  */
-function streamKimi(messages, system, onToken) {
-  const key = process.env.NVIDIA_API_KEY;
-  if (!key) return Promise.reject(new Error('NVIDIA_API_KEY is not set in dual_ai/.env'));
+function request({ messages, system, onToken, maxTokens = 16384, allowEmpty = false }) {
+  const { baseUrl, apiKey, apiKeyEnv } = settings.endpointFor();
+  if (!apiKey) return Promise.reject(new Error(`${apiKeyEnv} is not set in dual_ai/.env`));
+  const url = new URL(`${baseUrl}/chat/completions`);
   const body = JSON.stringify({
-    model: process.env.KIMI_MODEL || 'moonshotai/kimi-k3',
+    model: settings.modelFor('nvidia'),
     messages: foldSystem(system, messages),
-    max_tokens: 16384,
+    max_tokens: maxTokens,
     // NVIDIA's Kimi K3 produces gibberish at temperature 1.0 (empty content, random reasoning tokens).
     temperature: parseFloat(process.env.KIMI_TEMPERATURE ?? '0.6'),
     top_p: parseFloat(process.env.KIMI_TOP_P ?? '0.95'),
@@ -40,10 +40,10 @@ function streamKimi(messages, system, onToken) {
   });
 
   return new Promise((resolve, reject) => {
-    const req = https.request(URL_, {
+    const req = (url.protocol === 'http:' ? http : https).request(url, {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${key}`,
+        Authorization: `Bearer ${apiKey}`,
         Accept: 'text/event-stream',
         'Content-Type': 'application/json',
         'Content-Length': Buffer.byteLength(body),
@@ -52,7 +52,11 @@ function streamKimi(messages, system, onToken) {
       if (res.statusCode !== 200) {
         let err = '';
         res.on('data', c => { err += c; });
-        res.on('end', () => reject(new Error(`NVIDIA API error ${res.statusCode}: ${err.slice(0, 300)}`)));
+        res.on('end', () => {
+          let detail = err.slice(0, 300);
+          try { const j = JSON.parse(err); detail = j.detail ?? j.error?.message ?? j.message ?? detail; } catch {}
+          reject(Object.assign(new Error(`${url.hostname} error ${res.statusCode}: ${detail}`), { status: res.statusCode, detail }));
+        });
         return;
       }
       let buf = '', full = '';
@@ -67,21 +71,45 @@ function streamKimi(messages, system, onToken) {
           try {
             for (const choice of JSON.parse(data).choices ?? []) {
               const piece = choice.delta?.content ?? '';
-              if (piece) { full += piece; onToken(piece); }
+              if (piece) { full += piece; onToken?.(piece); }
             }
           } catch { /* partial or non-JSON line */ }
         }
       });
       res.on('end', () => {
-        if (!full.trim()) reject(new Error('Kimi (NVIDIA) returned an empty answer. Try again, or check KIMI_MODEL / KIMI_TEMPERATURE.'));
+        if (!full.trim() && !allowEmpty) reject(new Error('The model returned an empty answer. Try again, or check the model and KIMI_TEMPERATURE in ⚙ Settings.'));
         else resolve(full);
       });
       res.on('error', reject);
     });
-    req.setTimeout(300_000, () => req.destroy(new Error('NVIDIA API timeout')));
+    req.setTimeout(300_000, () => req.destroy(new Error('Model API timeout')));
     req.on('error', reject);
     req.end(body);
   });
 }
 
-module.exports = { streamKimi, foldSystem };
+/**
+ * @param {Array}    messages  prepared payload (redacted by the brain)
+ * @param {string}   system
+ * @param {Function} onToken
+ * @returns {Promise<string>} full reply text (as received; placeholders still in it)
+ */
+function streamKimi(messages, system, onToken) {
+  return request({ messages, system, onToken });
+}
+
+/**
+ * Check that a provider's chosen model answers, with one token. Used by ⚙ Settings → Test.
+ * @returns {Promise<{ok:boolean, status?:number, message:string}>}
+ */
+async function testModel(provider) {
+  if (provider !== 'nvidia') return { ok: false, message: 'Test not available yet for this provider.' };
+  try {
+    await request({ messages: [{ role: 'user', content: 'Reply with: ok' }], system: '', maxTokens: 1, allowEmpty: true });
+    return { ok: true, message: `${settings.modelFor('nvidia')} answered.` };
+  } catch (err) {
+    return { ok: false, status: err.status, message: err.detail ?? err.message };
+  }
+}
+
+module.exports = { streamKimi, testModel, foldSystem };
