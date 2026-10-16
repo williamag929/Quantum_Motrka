@@ -8,9 +8,14 @@ from session import system_prompt
 
 
 @pytest.fixture(autouse=True)
-def fresh(monkeypatch):
-    """No cache between tests; Ollama is unreachable unless a test says otherwise."""
+def fresh(monkeypatch, tmp_path):
+    """No cache between tests; Ollama is unreachable unless a test says otherwise.
+
+    Settings point at an empty temp dir so the real ~/.motkra/settings.json never leaks in.
+    """
     cap._cache = None
+    monkeypatch.setattr(cap, "MOTKRA_DIR", tmp_path)
+    monkeypatch.setattr(cap, "SETTINGS", tmp_path / "settings.json")
     monkeypatch.setattr(cap, "_ollama_models", lambda timeout=1.0: None)
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     monkeypatch.delenv("NVIDIA_API_KEY", raising=False)
