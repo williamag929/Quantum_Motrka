@@ -525,6 +525,9 @@ class MoktaProvider {
     const picked = providerSettings.pick(route(userText), {
       available: providers.available,
       cloudPreference: providers.cloudPreference,
+      mode: providers.mode,
+      tasks: providers.tasks,
+      taskKind: providerSettings.classifyTask(userText),
       forced: ['local', 'cloud', 'kimi'].includes(mode) ? mode : null,
       secretLocal: forcedLocal,
     });
