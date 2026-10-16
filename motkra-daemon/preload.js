@@ -39,6 +39,9 @@ contextBridge.exposeInMainWorld('motkra', {
   /** Try a provider's chosen model with one token: resolves to { ok, status?, message }. */
   testProvider: id => ipcRenderer.invoke('provider-test', id),
 
+  /** Model ids a provider offers: resolves to { ok, models?, message? }. */
+  listProviderModels: id => ipcRenderer.invoke('provider-models', id),
+
   /**
    * Fires once per query with the model name chosen by the router.
    * @param {(model:'claude'|'gemma') => void} cb

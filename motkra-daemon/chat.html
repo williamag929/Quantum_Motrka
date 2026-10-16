@@ -584,7 +584,7 @@ const settingsOverlay = document.getElementById('settings-overlay');
 const providerList    = document.getElementById('provider-list');
 const PROVIDER_ICON   = { local: '🏠', claude: '☁', nvidia: '⚡' };
 
-function textInput(value, placeholder, onSave, full = false) {
+function textInput(value, placeholder, onSave, full = false, suggestionsFor = null) {
   const input = document.createElement('input');
   input.type = 'text';
   input.value = value;
@@ -592,6 +592,23 @@ function textInput(value, placeholder, onSave, full = false) {
   input.spellcheck = false;
   if (full) input.className = 'full';
   input.addEventListener('change', () => onSave(input.value.trim()));
+  if (suggestionsFor) {
+    // Offer the provider's own model list; fetched once, the first time the field is used.
+    const list = document.createElement('datalist');
+    list.id = `models-${suggestionsFor}`;
+    input.setAttribute('list', list.id);
+    let loaded = false;
+    input.addEventListener('focus', async () => {
+      if (loaded) return;
+      loaded = true;
+      const r = await window.motkra.listProviderModels(suggestionsFor);
+      if (r.ok) list.replaceChildren(...r.models.map(m => { const o = document.createElement('option'); o.value = m; return o; }));
+      else input.title = r.message ?? '';
+    });
+    const wrap = document.createDocumentFragment();
+    wrap.append(input, list);
+    return wrap;
+  }
   return input;
 }
 
@@ -615,7 +632,7 @@ function providerDetail(p, status) {
     textInput(p.model, 'model id', async model => {
       // Empty means "back to the default"; re-render so the field shows the effective model.
       renderSettings(await window.motkra.saveSettings({ models: { [p.id]: model } }));
-    }),
+    }, false, p.id),
     test,
   );
   if (p.id === 'nvidia') {

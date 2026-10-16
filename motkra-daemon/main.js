@@ -233,7 +233,13 @@ ipcMain.handle('settings-get', () => settings.status());
 // ⚙ Settings → Test: one-token request with the provider's chosen model.
 ipcMain.handle('provider-test', (event, id) => {
   if (!chatWin || event.sender !== chatWin.webContents) return { ok: false, message: 'Not allowed.' };
-  return require('./kimi').testModel(String(id));
+  return require('./providers').testModel(String(id));
+});
+
+// ⚙ Settings: model ids a provider offers (suggestions for the model field).
+ipcMain.handle('provider-models', (event, id) => {
+  if (!chatWin || event.sender !== chatWin.webContents) return { ok: false, models: [], message: 'Not allowed.' };
+  return require('./providers').listModels(String(id));
 });
 
 ipcMain.handle('settings-set', (event, update) => {
