@@ -41,7 +41,7 @@ function route(text) {
 /** @param {boolean|null} think  hidden reasoning; the brain turns it off for quick questions (~5x faster) */
 async function handleGemmaStream(messages, system, onToken, think = null) {
   const body = JSON.stringify({
-    model:    process.env.GEMMA_MODEL ?? 'gemma4:e2b',
+    model:    settings.modelFor('local'),
     messages: [{ role: 'system', content: system }, ...messages],
     stream:   true,
     ...(typeof think === 'boolean' ? { think } : {}),
@@ -130,7 +130,7 @@ async function handleClaudeStream(messages, onToken, agent = null, privacy = nul
   const secrets = privacy ? { ...privacy.secrets } : null;
 
   const params = {
-    model:         'claude-opus-4-7',
+    model:         settings.modelFor('claude'),
     max_tokens:    16000,
     thinking:      { type: 'adaptive' },
     output_config: { effort: 'high' },

@@ -218,7 +218,7 @@ ipcMain.on('open-vscode', openVSCode);
 
 /** Free the local model's memory now instead of after Ollama's keep-alive (default 5 min). */
 function unloadLocalModel() {
-  const body = JSON.stringify({ model: process.env.GEMMA_MODEL || 'gemma4:e2b', keep_alive: 0 });
+  const body = JSON.stringify({ model: settings.modelFor('local'), keep_alive: 0 });
   const req = require('http').request({
     hostname: process.env.OLLAMA_HOST ?? 'localhost', port: parseInt(process.env.OLLAMA_PORT ?? '11434', 10),
     path: '/api/generate', method: 'POST',
@@ -229,6 +229,12 @@ function unloadLocalModel() {
 }
 
 ipcMain.handle('settings-get', () => settings.status());
+
+// ⚙ Settings → Test: one-token request with the provider's chosen model.
+ipcMain.handle('provider-test', (event, id) => {
+  if (!chatWin || event.sender !== chatWin.webContents) return { ok: false, message: 'Not allowed.' };
+  return require('./kimi').testModel(String(id));
+});
 
 ipcMain.handle('settings-set', (event, update) => {
   if (!chatWin || event.sender !== chatWin.webContents) return settings.status();
