@@ -87,7 +87,9 @@ const DESTRUCTIVE_SUBCOMMANDS = {
 };
 
 function programName(argv0) {
-  return path.basename(argv0).toLowerCase().replace(/\.(exe|cmd|bat|com|ps1)$/, '');
+  // Normalize separators so Windows paths (C:\Windows\System32\shutdown.exe) are
+  // recognized on every platform — path.basename only splits '\' on win32.
+  return path.basename(String(argv0).replace(/\\/g, '/')).toLowerCase().replace(/\.(exe|cmd|bat|com|ps1)$/, '');
 }
 
 function classify(argv) {
