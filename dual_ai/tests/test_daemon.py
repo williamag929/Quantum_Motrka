@@ -62,6 +62,15 @@ def api(monkeypatch):
     server.server_close()
 
 
+def test_capabilities_endpoint(api):
+    call, _ = api
+    status, data = call("/capabilities")
+    assert status == 200
+    assert data["name"] == "Motkra"
+    assert set(data["lanes"]) == {"local", "cloud", "kimi"}
+    assert "features" in data
+
+
 def test_status_matches_what_the_extension_expects(api):
     call, _ = api
     code, body = call("/status")

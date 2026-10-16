@@ -13,6 +13,7 @@ from typing import Callable, Optional
 import claude_client
 import gemma_client
 import kimi_client
+from capabilities import prompt_line
 from config import CLAUDE_MODEL, GEMMA_MODEL, KIMI_MODEL, LOCAL_SYSTEM_PROMPT, PERSONAL_SYSTEM_PROMPT, SYSTEM_PROMPT
 from privacy import REDACTION_NOTE, StreamRestorer, redact, restore
 from router import Decision, looks_personal, smart_route
@@ -66,9 +67,12 @@ def route_reason(decision: Decision, redacted: bool) -> str:
 
 def system_prompt(decision: Decision, messages: list[dict], secrets: dict[str, str]) -> str:
     if decision.target == "local":
+        # The local lane keeps its static compact prompt: on CPU every extra token is latency,
+        # so the live capability line is only worth it on the cloud lane (Phase 24B-1).
         return PERSONAL_SYSTEM_PROMPT if decision.private else LOCAL_SYSTEM_PROMPT
     has_placeholders = any(p in m["content"] for m in messages for p in secrets)
-    return SYSTEM_PROMPT + (REDACTION_NOTE if has_placeholders else "")
+    cap = prompt_line()
+    return SYSTEM_PROMPT + (f" {cap}" if cap else "") + (REDACTION_NOTE if has_placeholders else "")
 
 
 def plan(mode: str, messages: list[dict]) -> dict:
