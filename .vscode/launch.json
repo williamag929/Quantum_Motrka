@@ -1,0 +1,19 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      // F5 from the repo root: only dual_ai_ext is a VS Code extension.
+      // motkra-daemon, motkra-browser and motkra-mcp are not (no engines.vscode), so they must
+      // never be passed as extensionDevelopmentPath.
+      "name": "Run Motkra extension (dual_ai_ext)",
+      "type": "extensionHost",
+      "request": "launch",
+      "args": [
+        "--extensionDevelopmentPath=${workspaceFolder}/dual_ai_ext"
+      ],
+      "outFiles": [
+        "${workspaceFolder}/dual_ai_ext/**/*.js"
+      ]
+    }
+  ]
+}
